@@ -32,17 +32,19 @@ The remote listens on **3004** and proxies `/api` to `http://localhost:8088`. It
 `./App` as the Webpack Module Federation container `eia_direct_claims`. Every API request
 sends `X-EIA-Tenant` and `X-EIA-Book: DIRECT`.
 
-`npm run build` produces the production bundle. `npm test` runs the Playwright test against
+`npm run build` produces the production bundle. `npm test` runs the Playwright tests against
 a mocked API. `@swc/core` is pinned to exactly `1.10.7`.
+
+The workbench lists claims and opens a selected claim with tabs for:
+injuries and exposures, reserve history (derived current reserve plus the append-only
+ledger), coverage, litigation, settlements, and recoveries and liens. Money is displayed from
+the decimal strings returned by the domain.
 
 ## Verification
 
-- Lint and format
-- Unit tests with 100% business-logic coverage where applicable
-- Contract tests
-- Integration or Playwright tests where applicable
-- Security scan and SBOM
-- Build and publish
+- `npm run build` - production webpack bundle.
+- `npx playwright test` - registration, reserve-history, coverage, and tab-set flows with a
+  mocked API; every request asserts the DIRECT book header.
 
 ## Notes
 

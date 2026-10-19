@@ -21,6 +21,20 @@ Direct Claims federated remote: screens, widgets, record tabs, and transaction c
 - Maintain README, CODEOWNERS, SECURITY, CHANGELOG, tests, and local verification.
 - Contain no business logic in shared libraries or front-end remotes.
 
+## Local run
+
+```powershell
+npm install
+npm start
+```
+
+The remote listens on **3004** and proxies `/api` to `http://localhost:8088`. It exposes
+`./App` as the Webpack Module Federation container `eia_direct_claims`. Every API request
+sends `X-EIA-Tenant` and `X-EIA-Book: DIRECT`.
+
+`npm run build` produces the production bundle. `npm test` runs the Playwright test against
+a mocked API. `@swc/core` is pinned to exactly `1.10.7`.
+
 ## Verification
 
 - Lint and format

@@ -9,3 +9,6 @@ The format is based on Keep a Changelog and the project uses Semantic Versioning
 ### Added
 
 - Repository baseline.
+- Direct Claims remote slice: React 19 workbench exposed as `./App` from the
+  `eia_direct_claims` Module Federation container on port 3004, `/api` proxy to the domain
+  service, DIRECT book header on every request, and a Playwright test with a mocked API.

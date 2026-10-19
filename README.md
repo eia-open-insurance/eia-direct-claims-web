@@ -1,17 +1,17 @@
-# eia-direct-web
+# eia-primary-web
 
 - GitHub organization: `eia-open-insurance`
-- Repository URL: https://github.com/eia-open-insurance/eia-direct-web
+- Repository URL: https://github.com/eia-open-insurance/eia-primary-web
 - Type: Federated front-end
 - Deployable: Yes
-- Owner: Direct
+- Owner: Primary
 - Runtime: React 19 and Webpack 5
 - Data store: None
 - Depends on: eia-frontend-platform, eia-contracts, eia-gateway
 
 ## Purpose
 
-Direct federated remote: screens, widgets, record tabs, and transaction composition. Direct claims: FNOL, coverage, injury, reserves, litigation, settlement, and recovery.
+Primary federated remote: screens, widgets, record tabs, and transaction composition. Primary claims: FNOL, coverage, injury, reserves, litigation, settlement, and recovery.
 
 ## Responsibilities
 

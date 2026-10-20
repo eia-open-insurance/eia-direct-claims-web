@@ -77,10 +77,21 @@ function RelatedPayments({ claim }) {
     setState('loading');
     api.payments
       .search(claim.id, 5)
-      .then((body) => {
+      .then(async (body) => {
         if (!alive) return;
         const currency = claim.reserveCurrency || 'USD';
-        setPayments(paymentItems(body).map((row) => relatedPayment(row, currency)));
+        const rows = paymentItems(body).map((row) => relatedPayment(row, currency));
+        const hydrated = await Promise.all(rows.map(async (row) => {
+          if (!row.id || row.amount != null) return row;
+          try {
+            const detail = await api.payments.get(row.id);
+            return relatedPayment({ ...row, ...detail }, currency);
+          } catch {
+            return row;
+          }
+        }));
+        if (!alive) return;
+        setPayments(hydrated);
         setState('ready');
       })
       .catch(() => {

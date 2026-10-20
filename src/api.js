@@ -113,7 +113,8 @@ export const api = {
     // The claim id is the search term: payments saved from this claim's
     // hand-off carry sourceId=claimId, so the same query returns them.
     search: (query, limit = 5) =>
-      request(`/api/v1/payments/search?q=${encodeURIComponent(query || '')}&limit=${limit}`)
+      request(`/api/v1/payments/search?q=${encodeURIComponent(query || '')}&limit=${limit}`),
+    get: (paymentId) => request(`/api/v1/payments/${paymentId}`)
   },
   recoveries: {
     list: (claimId) => request(`/api/v1/claims/${claimId}/recoveries`),

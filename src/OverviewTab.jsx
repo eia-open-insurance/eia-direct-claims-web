@@ -11,6 +11,7 @@ const ACTIONS = [
   ['injuries', 'Record an injury or exposure'],
   ['reserves', 'Post a reserve change'],
   ['coverage', 'Record a coverage decision'],
+  ['allocations', 'Allocate the claim to policy years'],
   ['litigation', 'Open a litigation matter'],
   ['settlements', 'Propose a settlement'],
   ['recovery', 'Record a recovery or lien']

@@ -40,8 +40,22 @@ a mocked API. `@swc/core` is pinned to exactly `1.10.7`.
 
 The workbench lists claims and opens a selected claim with tabs for:
 injuries and exposures, reserve history (derived current reserve plus the append-only
-ledger), coverage, litigation, settlements, and recoveries and liens. Money is displayed from
-the decimal strings returned by the domain.
+ledger), coverage, policy-year allocations, litigation, settlements, and recoveries and liens.
+Money is displayed from the decimal strings returned by the domain.
+
+The **Allocations** tab sits after **Coverage** and reads
+`GET /api/v1/claims/{claimId}/allocations`. Its summary shows the allocated amount, allocated
+percentage, unallocated amount against the current reserve, and the allocation count. The
+table shows policy year, layer, allocation percentage, allocated amount, and a policy link.
+The form is fixed to the claim's policy (policy number and link) and collects a policy year,
+layer (for example `PRIMARY` or `EXCESS_1`), a 0-100 allocation percent, and the allocated
+amount. The percent is sent to `POST /api/v1/claims/{claimId}/allocations` as a fraction, and
+the form prevents the claim's allocation total from exceeding 100%, showing the remaining
+percent as the user types. A successful create refreshes the ledger and the claim record; a
+409 conflict keeps the entered values and offers **Reload allocations**. Loading, error, and
+empty states stay inside the tab. Allocation distributes the claim loss across policy years and
+layers; it does not change the reserve or the coverage position, and Policy owns the limit
+ledger.
 
 Ownership is visible in the record header, the **Assigned to** summary card, and each queue
 row (`assignedAdjuster` / `assignedTeam`, or **Unassigned**). **Assign** opens a dialog with:
@@ -101,16 +115,18 @@ append-only event inbox and that the business claim record remains the source of
 ## Verification
 
 - `npm run build` - production webpack bundle.
-- `npx playwright test` - registration, reserve-history, coverage, settlement-to-payment
-  hand-off, related-payments, assignment (directory fetch/cache, person options with role
-  hints, team filtering, displayName/team submission, pre-filled and unassigned states,
-  queue filtering, 409 stale reload, and the directory-503 free-text/static-team fallback),
-  overview payments (source path/query plus tenant and DIRECT book headers, array and
-  `{items}` payloads, rows/link/payee/created date, paid-and-pending summary, empty hand-off
-  context, 503 containment, non-blocking loading, and claim-change refetch), activity
-  (aggregate path/tenant header, newest-first timeline, empty and 503 states, payload
-  summaries, and claim-change refetch), and tab-set flows with a mocked API; every domain
-  request asserts the DIRECT book header.
+- `npx playwright test` - registration, reserve-history, coverage, allocations (list and
+  summary, 0-100 percent sent as a fraction, exactly-100 boundary, remaining-percent hint,
+  over-100 client validation, empty and loading states, 503 containment/retry, and 409
+  conflict reload), settlement-to-payment hand-off, related-payments, assignment (directory
+  fetch/cache, person options with role hints, team filtering, displayName/team submission,
+  pre-filled and unassigned states, queue filtering, 409 stale reload, and the directory-503
+  free-text/static-team fallback), overview payments (source path/query plus tenant and DIRECT
+  book headers, array and `{items}` payloads, rows/link/payee/created date, paid-and-pending
+  summary, empty hand-off context, 503 containment, non-blocking loading, and claim-change
+  refetch), activity (aggregate path/tenant header, newest-first timeline, empty and 503
+  states, payload summaries, and claim-change refetch), and tab-set flows with a mocked API;
+  every domain request asserts the DIRECT book header.
 
 ## Notes
 

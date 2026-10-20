@@ -64,3 +64,14 @@ The format is based on Keep a Changelog and the project uses Semantic Versioning
   holds the settlement and paid-loss record. Playwright covers the request path/query/headers,
   array and `{items}` payloads, rows and links, empty state, 503 containment, non-blocking
   loading, and claim-change refetch.
+- Policy-year allocations: an **Allocations** tab after **Coverage** reads
+  `GET /api/v1/claims/{claimId}/allocations` and shows the allocated amount, allocated
+  percentage, unallocated amount against the current reserve, and the allocation count. The
+  table lists policy year, layer, allocation percentage, allocated amount, and a policy link.
+  The create form is fixed to the claim policy (policy number/link) and posts `policyId`,
+  `policyYear`, `layer`, a 0-100 percent sent as a fraction, and `allocatedAmount` to
+  `POST /api/v1/claims/{claimId}/allocations`. The form validates that the claim total stays
+  at or below 100%, shows the remaining percent, keeps the user's values and offers
+  **Reload allocations** on a 409, and contains loading, error, and empty states in the tab.
+  The context panel states that allocation distributes the claim loss across policy years and
+  layers without changing the reserve or coverage, and that Policy owns the limit ledger.

@@ -165,6 +165,20 @@ export const api = {
     decide: (claimId, body) =>
       request(`/api/v1/claims/${claimId}/coverage`, { method: 'POST', body: JSON.stringify(body) })
   },
+  /**
+   * Policy-year and layer allocations. The claim allocates its loss across
+   * policy years; Policy remains the limit authority and the claim reserve is
+   * not changed by an allocation. Percentages travel as fractions (0, 1] and
+   * money as the decimal strings the domain returns.
+   */
+  allocations: {
+    list: (claimId) => request(`/api/v1/claims/${claimId}/allocations`),
+    create: (claimId, body) =>
+      request(`/api/v1/claims/${claimId}/allocations`, {
+        method: 'POST',
+        body: JSON.stringify(body)
+      })
+  },
   litigation: {
     list: (claimId) => request(`/api/v1/claims/${claimId}/litigation`),
     create: (claimId, body) =>

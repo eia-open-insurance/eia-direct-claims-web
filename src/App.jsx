@@ -3,6 +3,7 @@ import './ui.css';
 import './ui-overrides.css';
 import { api, BOOK, money } from './api.js';
 import ActivityTab from './ActivityTab.jsx';
+import AllocationsTab from './AllocationsTab.jsx';
 import AssignmentDialog, {
   assignmentFilterValues,
   assignmentText,
@@ -44,6 +45,7 @@ const TABS = [
   { id: 'injuries', label: 'Injuries & Exposures' },
   { id: 'reserves', label: 'Reserve History' },
   { id: 'coverage', label: 'Coverage' },
+  { id: 'allocations', label: 'Allocations' },
   { id: 'litigation', label: 'Litigation' },
   { id: 'settlements', label: 'Settlements' },
   { id: 'recovery', label: 'Recovery & Liens' },
@@ -594,6 +596,14 @@ export default function App() {
         return <ReserveTab claim={selectedClaim} onChanged={handleRecordChanged} />;
       case 'coverage':
         return <CoverageTab claim={selectedClaim} />;
+      case 'allocations':
+        return (
+          <AllocationsTab
+            claim={selectedClaim}
+            related={related}
+            onChanged={handleRecordChanged}
+          />
+        );
       case 'litigation':
         return <LitigationTab claim={selectedClaim} />;
       case 'settlements':

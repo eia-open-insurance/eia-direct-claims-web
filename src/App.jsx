@@ -12,6 +12,7 @@ import ClaimProgress, { EMPTY_PROCESS } from './ClaimProgress.jsx';
 import EntityPicker from './EntityPicker.jsx';
 import CoverageTab from './CoverageTab.jsx';
 import DiaryNotesTab from './DiaryNotesTab.jsx';
+import { loadDirectory } from './directory.js';
 import InjuryExposureTab from './InjuryExposureTab.jsx';
 import LitigationTab from './LitigationTab.jsx';
 import { navigate, recordHref } from './navigation.js';
@@ -153,6 +154,7 @@ export default function App() {
   const [processData, setProcessData] = useState(EMPTY_PROCESS);
   const [summaryNonce, setSummaryNonce] = useState(0);
   const [queueFilter, setQueueFilter] = useState('');
+  const [directoryState, setDirectoryState] = useState({ status: 'loading', data: null });
 
   const claimsRef = useRef([]);
   const applyingUrlRef = useRef(false);
@@ -259,6 +261,26 @@ export default function App() {
     return () => {
       alive = false;
       window.removeEventListener('popstate', onPopState);
+    };
+  }, []);
+
+  /**
+   * The people/team directory is loaded once for the whole app session. It is
+   * shared master data, so it is neither tenant- nor book-scoped, and a failure
+   * is deliberately non-blocking: the assignment dialog falls back to manual
+   * ownership entry and the standard team list.
+   */
+  useEffect(() => {
+    let alive = true;
+    loadDirectory()
+      .then((data) => {
+        if (alive) setDirectoryState({ status: 'ready', data });
+      })
+      .catch(() => {
+        if (alive) setDirectoryState({ status: 'error', data: null });
+      });
+    return () => {
+      alive = false;
     };
   }, []);
 
@@ -854,6 +876,8 @@ export default function App() {
       {assignOpen && selectedClaim && (
         <AssignmentDialog
           claim={selectedClaim}
+          directory={directoryState.data}
+          directoryStatus={directoryState.status}
           onClose={closeAssignment}
           onAssigned={handleAssigned}
           onReload={() => reloadClaimRecord(selectedClaim.id)}

@@ -36,6 +36,16 @@ The format is based on Keep a Changelog and the project uses Semantic Versioning
   The Settlements tab adds a **Related payments** card backed by
   `GET /api/v1/payments/search?q=<claimId>&limit=5`, and the Overview context panel states
   that Payment owns approval and execution.
+- Directory-backed assignment: the workbench fetches the public
+  `GET /api/v1/directory` people/team master data once at start-up, caches it for the app
+  session, and uses it to replace the free-text adjuster field with a person select
+  (`displayName` plus role) and a role/email hint. The team select shows directory
+  `{code,label}` options narrowed to the selected person's team codes when available and all
+  teams otherwise; the current owner is preselected when they match a directory person
+  (otherwise `A. Adjuster`) and the current team is kept when valid (otherwise the person's
+  first team). Assignment still sends the display name, team code, and `expectedVersion`.
+  When the directory returns 503 the dialog retains the free-text adjuster and static team
+  fallback. Playwright covers the fetch/cache, options, filtering, submission, and fallback.
 - Claim activity timeline: an **Activity** tab after **Diary & Notes** renders
   `GET /api/v1/events/aggregate/{claimId}?limit=50` scoped by `X-EIA-Tenant`. Rows show the
   `occurredAt` timestamp, a human-readable event name, inbox status and event version, concise

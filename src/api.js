@@ -12,15 +12,16 @@ export function headers(extra = {}) {
 }
 
 async function request(path, options = {}) {
-  // `book` is a transport concern, not a fetch option. The default keeps the
-  // DIRECT book wall on every domain request; pass `book: null` for shared
-  // master data (for example parties) that is scoped by tenant only.
-  const { book = BOOK, ...init } = options;
+  // `book` and `tenant` are transport concerns, not fetch options. The default
+  // keeps the DIRECT book wall and tenant scope on every domain request; pass
+  // `book: null` for shared master data (for example parties), and `tenant: null`
+  // for platform-wide master data (for example the people/team directory).
+  const { book = BOOK, tenant = TENANT, ...init } = options;
   const response = await fetch(path, {
     ...init,
     cache: init.cache || 'no-store',
     headers: {
-      'X-EIA-Tenant': TENANT,
+      ...(tenant ? { 'X-EIA-Tenant': tenant } : {}),
       ...(book ? { 'X-EIA-Book': book } : {}),
       ...(init.body ? { 'Content-Type': 'application/json' } : {}),
       ...(init.headers || {})
@@ -88,6 +89,13 @@ export function createNote(claimId, body, key) {
 }
 
 export const api = {
+  directory: {
+    /**
+     * People and teams for assignment. The directory is platform master data,
+     * not book- or tenant-scoped, so neither wall is sent on this read.
+     */
+    get: () => request('/api/v1/directory', { book: null, tenant: null })
+  },
   claims: {
     list: () => request('/api/v1/claims'),
     get: (claimId) => request(`/api/v1/claims/${claimId}`),

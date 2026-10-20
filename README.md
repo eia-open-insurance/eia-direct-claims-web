@@ -31,7 +31,9 @@ npm start
 The remote listens on **3004** and proxies `/api` to `http://localhost:8088`. It exposes
 `./App` as the Webpack Module Federation container `eia_direct_claims`. Claim and policy
 requests send `X-EIA-Tenant` and `X-EIA-Book: DIRECT`; shared or platform reads (parties,
-documents, and the event inbox) are scoped by tenant only.
+documents, the event inbox, and the people/team directory) are scoped by tenant only or are
+public. `GET /api/v1/directory` is public master data, so it carries neither header and is
+fetched once when the app starts, then reused in memory.
 
 `npm run build` produces the production bundle. `npm test` runs the Playwright tests against
 a mocked API. `@swc/core` is pinned to exactly `1.10.7`.
@@ -42,16 +44,25 @@ ledger), coverage, litigation, settlements, and recoveries and liens. Money is d
 the decimal strings returned by the domain.
 
 Ownership is visible in the record header, the **Assigned to** summary card, and each queue
-row (`assignedAdjuster` / `assignedTeam`, or **Unassigned**). **Assign** opens a dialog
-pre-filled with the current assignment or the current user (`A. Adjuster`) and the team.
-Saving sends
+row (`assignedAdjuster` / `assignedTeam`, or **Unassigned**). **Assign** opens a dialog with:
+
+- an **Assigned adjuster** select built from `GET /api/v1/directory` people, showing each
+  person's display name and role; the selected person's role and email are shown underneath;
+- a **Team** select built from the directory `{code,label}` teams, narrowed to the selected
+  person's team codes when the directory has routing data and otherwise showing every team;
+- the current `assignedAdjuster` preselected when it matches a directory person (otherwise
+  `A. Adjuster`), and the current team when it belongs to that person (otherwise their first
+  team).
+
+If the directory is unavailable the dialog keeps a free-text adjuster input and the static
+assignment team list, so ownership can still be changed. Saving sends
 
 ```http
 PATCH /api/v1/claims/{claimId}/assignment
 X-EIA-Book: DIRECT
 X-EIA-Actor: A. Adjuster
 
-{ "assignedAdjuster": "…", "assignedTeam": "DIRECT_CLAIMS", "expectedVersion": 3 }
+{ "assignedAdjuster": "A. Adjuster", "assignedTeam": "DIRECT_CLAIMS", "expectedVersion": 3 }
 ```
 
 with the claim version read from the record. A stale version returns 409; the dialog keeps
@@ -81,11 +92,12 @@ append-only event inbox and that the business claim record remains the source of
 
 - `npm run build` - production webpack bundle.
 - `npx playwright test` - registration, reserve-history, coverage, settlement-to-payment
-  hand-off, related-payments, assignment (payload/version, header/summary/queue refresh,
-  unassigned and pre-filled states, queue filtering, and 409 stale reload), activity (aggregate
-  path/tenant header, newest-first timeline, empty and 503 states, payload summaries, and
-  claim-change refetch), and tab-set flows with a mocked API; every domain request asserts the
-  DIRECT book header.
+  hand-off, related-payments, assignment (directory fetch/cache, person options with role
+  hints, team filtering, displayName/team submission, pre-filled and unassigned states,
+  queue filtering, 409 stale reload, and the directory-503 free-text/static-team fallback),
+  activity (aggregate path/tenant header, newest-first timeline, empty and 503 states,
+  payload summaries, and claim-change refetch), and tab-set flows with a mocked API; every
+  domain request asserts the DIRECT book header.
 
 ## Notes
 

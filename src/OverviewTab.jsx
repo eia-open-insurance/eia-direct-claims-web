@@ -200,6 +200,11 @@ export default function OverviewTab({ claim, related, onNavigate }) {
           claim. Reserves and settlements recorded here drive payment instructions and the financial events that
           post downstream.
         </p>
+        <p>
+          Authorized or executed settlements can be handed to Payment from the Settlements tab. Payment owns
+          payment approval and execution; Direct Claims keeps the settlement record and links the resulting
+          payment back to this claim.
+        </p>
         <div className="links">
           {claim.policyId && (
             <a href={policyHref} onClick={openRecord} data-testid="why-policy-link" title="Open policy record">

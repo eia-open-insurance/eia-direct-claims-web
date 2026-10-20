@@ -108,6 +108,13 @@ export const api = {
         body: JSON.stringify(body)
       })
   },
+  payments: {
+    // Payment is the financial system of record and owns approval/execution.
+    // The claim id is the search term: payments saved from this claim's
+    // hand-off carry sourceId=claimId, so the same query returns them.
+    search: (query, limit = 5) =>
+      request(`/api/v1/payments/search?q=${encodeURIComponent(query || '')}&limit=${limit}`)
+  },
   recoveries: {
     list: (claimId) => request(`/api/v1/claims/${claimId}/recoveries`),
     create: (claimId, body) =>

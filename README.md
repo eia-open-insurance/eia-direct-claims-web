@@ -40,11 +40,18 @@ injuries and exposures, reserve history (derived current reserve plus the append
 ledger), coverage, litigation, settlements, and recoveries and liens. Money is displayed from
 the decimal strings returned by the domain.
 
+An authorized or executed settlement can be handed to the **Payment** remote through
+`/payment?new=1&sourceType=DIRECT_CLAIM&sourceId=…&sourceReference=…&amount=…&currency=…&payeePartyId=…`.
+Direct Claims never creates the payment itself; the Payment workbench confirms the source and
+saves it. The Settlements tab lists related payments via
+`GET /api/v1/payments/search?q=<claimId>&limit=5` and links each one back to `/payment?record=<id>`.
+
 ## Verification
 
 - `npm run build` - production webpack bundle.
-- `npx playwright test` - registration, reserve-history, coverage, and tab-set flows with a
-  mocked API; every request asserts the DIRECT book header.
+- `npx playwright test` - registration, reserve-history, coverage, settlement-to-payment
+  hand-off, related-payments, and tab-set flows with a mocked API; every request asserts the
+  DIRECT book header.
 
 ## Notes
 

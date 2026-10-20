@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api, money, RELEASE_DOCUMENT_ID, REVIEWER_ID } from './api.js';
-import { DataTable, ErrorText, Field, Panel } from './ui.jsx';
+import { navigate, recordHref } from './navigation.js';
+import { DataTable, ErrorText, Field, Panel, shortId, statusTone } from './ui.jsx';
 
 const EMPTY = {
   amount: '',
@@ -8,6 +9,148 @@ const EMPTY = {
   releaseScope: 'FULL',
   paymentInstructions: ''
 };
+
+/**
+ * Settlement statuses that may be handed to Payment. Direct Claims uses
+ * PROPOSED -> AUTHORIZED -> EXECUTED; APPROVED and PAID are accepted for
+ * compatibility with the shared settlement vocabulary.
+ */
+const PAYABLE_SETTLEMENT_STATUSES = ['AUTHORIZED', 'EXECUTED', 'APPROVED', 'PAID'];
+
+function isPayable(status) {
+  return PAYABLE_SETTLEMENT_STATUSES.includes(String(status || '').toUpperCase());
+}
+
+/**
+ * Cross-remote hand-off into the Payment workbench. Direct Claims never creates
+ * the payment: the URL carries the source claim, amount, currency, and payee so
+ * Payment can confirm them and save the DRAFT through POST /api/v1/payments.
+ */
+function paymentHref(claim, settlement) {
+  const params = new URLSearchParams();
+  params.set('new', '1');
+  params.set('sourceType', 'DIRECT_CLAIM');
+  params.set('sourceId', claim.id);
+  params.set('sourceReference', claim.claimNumber || '');
+  params.set('amount', settlement.amount == null ? '' : String(settlement.amount));
+  params.set('currency', settlement.currency || claim.reserveCurrency || 'USD');
+  if (claim.claimantPartyId) params.set('payeePartyId', claim.claimantPartyId);
+  return `/payment?${params.toString()}`;
+}
+
+/** The payment search envelope may be returned as an array or wrapped in items. */
+function paymentItems(body) {
+  if (Array.isArray(body)) return body;
+  if (Array.isArray(body?.items)) return body.items;
+  return [];
+}
+
+/**
+ * Normalizes a Payment DTO or a shared-search item into the row rendered in the
+ * related-payments table. The search endpoint matches the claim id because the
+ * hand-off stores sourceType=DIRECT_CLAIM and sourceId=<claimId>.
+ */
+function relatedPayment(row, fallbackCurrency) {
+  const id = row?.id || '';
+  return {
+    id,
+    paymentNumber: row?.paymentNumber || row?.label || (id ? shortId(id) : '—'),
+    status: row?.status || '',
+    amount: row?.amount ?? row?.paymentAmount ?? null,
+    currency: row?.currency || fallbackCurrency,
+    href: id ? recordHref('payment', id) : row?.href || ''
+  };
+}
+
+function openPayment(event) {
+  event.preventDefault();
+  navigate(event.currentTarget.getAttribute('href'));
+}
+
+function RelatedPayments({ claim }) {
+  const [payments, setPayments] = useState([]);
+  const [state, setState] = useState('loading');
+
+  useEffect(() => {
+    let alive = true;
+    setPayments([]);
+    setState('loading');
+    api.payments
+      .search(claim.id, 5)
+      .then((body) => {
+        if (!alive) return;
+        const currency = claim.reserveCurrency || 'USD';
+        setPayments(paymentItems(body).map((row) => relatedPayment(row, currency)));
+        setState('ready');
+      })
+      .catch(() => {
+        if (!alive) return;
+        setPayments([]);
+        setState('error');
+      });
+    return () => {
+      alive = false;
+    };
+  }, [claim.id, claim.reserveCurrency]);
+
+  return (
+    <Panel title="Related payments">
+      <p style={{ margin: '0 0 4px' }}>
+        Payments created from this claim in the Payment workbench. Payment owns approval and execution; an
+        authorized or executed settlement can be handed off from the actions above.
+      </p>
+      <div data-testid="related-payments">
+        {state === 'loading' && (
+          <p className="eia-muted" style={{ margin: '8px 0 0' }}>Loading related payments…</p>
+        )}
+        {state === 'error' && (
+          <p className="eia-muted" style={{ margin: '8px 0 0' }}>Related payments could not be loaded.</p>
+        )}
+        {state === 'ready' && (
+          <DataTable
+            columns={[
+              {
+                key: 'paymentNumber',
+                label: 'Payment',
+                render: (row) =>
+                  row.href ? (
+                    <a
+                      href={row.href}
+                      onClick={openPayment}
+                      data-testid={`related-payment-${row.id}`}
+                      title={`Open payment ${row.paymentNumber}`}
+                    >
+                      {row.paymentNumber}
+                    </a>
+                  ) : (
+                    row.paymentNumber
+                  )
+              },
+              {
+                key: 'status',
+                label: 'Status',
+                render: (row) =>
+                  row.status ? (
+                    <span className={`eia-pill ${statusTone(row.status)}`}>{row.status}</span>
+                  ) : (
+                    '—'
+                  )
+              },
+              {
+                key: 'amount',
+                label: 'Amount',
+                align: 'right',
+                render: (row) => (row.amount == null ? '—' : money(row.amount, row.currency))
+              }
+            ]}
+            rows={payments}
+            emptyText="No payments recorded for this claim."
+          />
+        )}
+      </div>
+    </Panel>
+  );
+}
 
 export default function SettlementTab({ claim, onChanged }) {
   const [settlements, setSettlements] = useState([]);
@@ -88,7 +231,7 @@ export default function SettlementTab({ claim, onChanged }) {
               key: 'actions',
               label: 'Actions',
               render: (row) => (
-                <span style={{ display: 'inline-flex', gap: 6 }}>
+                <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                   <button
                     type="button"
                     className="eia-btn-secondary"
@@ -105,6 +248,17 @@ export default function SettlementTab({ claim, onChanged }) {
                   >
                     {`Execute ${row.settlementNumber}`}
                   </button>
+                  {isPayable(row.status) && (
+                    <a
+                      className="eia-btn-secondary"
+                      href={paymentHref(claim, row)}
+                      onClick={openPayment}
+                      data-testid={`create-payment-${row.id}`}
+                      title={`Create a payment for ${row.settlementNumber}`}
+                    >
+                      Create payment
+                    </a>
+                  )}
                 </span>
               )
             }
@@ -113,6 +267,8 @@ export default function SettlementTab({ claim, onChanged }) {
           emptyText="No settlement."
         />
       </Panel>
+
+      <RelatedPayments claim={claim} />
 
       <Panel title="Propose a settlement">
         <form onSubmit={submit} className="eia-form-grid">

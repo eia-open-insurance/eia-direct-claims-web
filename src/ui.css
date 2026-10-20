@@ -407,6 +407,20 @@ main [role="status"] {
 }
 .eia-btn-secondary:hover { background: #f2f7fb !important; }
 
+/* Cross-remote actions (for example Create payment) are links that navigate in
+   the shell, but keep the secondary-button affordance. */
+a.eia-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  padding: 8px 13px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+a.eia-btn-secondary:hover { border-color: var(--eia-blue) !important; }
+
 .eia-btn-ghost {
   background: transparent !important;
   color: var(--eia-muted) !important;

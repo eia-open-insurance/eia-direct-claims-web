@@ -12,9 +12,18 @@ export function headers(extra = {}) {
 }
 
 async function request(path, options = {}) {
+  // `book` is a transport concern, not a fetch option. The default keeps the
+  // DIRECT book wall on every domain request; pass `book: null` for shared
+  // master data (for example parties) that is scoped by tenant only.
+  const { book = BOOK, ...init } = options;
   const response = await fetch(path, {
-    ...options,
-    headers: headers(options.body ? { 'Content-Type': 'application/json', ...(options.headers || {}) } : options.headers)
+    ...init,
+    headers: {
+      'X-EIA-Tenant': TENANT,
+      ...(book ? { 'X-EIA-Book': book } : {}),
+      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init.headers || {})
+    }
   });
   if (!response.ok) {
     const problem = await response.json().catch(() => ({}));
@@ -37,6 +46,15 @@ export const api = {
     create: (body) => request('/api/v1/claims', { method: 'POST', body: JSON.stringify(body) }),
     close: (claimId, body = {}) =>
       request(`/api/v1/claims/${claimId}/close`, { method: 'POST', body: JSON.stringify(body) })
+  },
+  policies: {
+    /** Policy detail is book-owned, so the DIRECT wall applies. */
+    get: (policyId) => request(`/api/v1/policies/${encodeURIComponent(policyId)}`)
+  },
+  parties: {
+    /** Party master data is shared across books and is scoped by tenant only. */
+    get: (partyId) =>
+      request(`/api/v1/parties/${encodeURIComponent(partyId)}`, { book: null })
   },
   cessions: {
     search: (query, limit = 5) =>

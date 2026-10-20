@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api, BOOK, money } from './api.js';
 import { navigate, recordHref } from './navigation.js';
+import { RelatedLabel } from './related.jsx';
 import { humanize, shortId, statusTone } from './ui.jsx';
 
 const ACTIONS = [
@@ -17,7 +18,7 @@ function openRecord(event) {
   navigate(event.currentTarget.getAttribute('href'));
 }
 
-function RelatedRecords({ claim }) {
+function RelatedRecords({ claim, policy }) {
   const [cessions, setCessions] = useState([]);
   const [state, setState] = useState(claim.policyId ? 'loading' : 'empty');
   const policyHref = claim.policyId ? recordHref('policy', claim.policyId) : '';
@@ -62,9 +63,12 @@ function RelatedRecords({ claim }) {
             href={policyHref}
             onClick={openRecord}
             data-testid="related-policy-link"
+            title="Open policy record"
           >
             <b>POLICY</b>
-            <span>{shortId(claim.policyId)}</span>
+            <span>
+              <RelatedLabel related={policy} />
+            </span>
           </a>
         )}
         {cessions.map((cession) => {
@@ -97,10 +101,18 @@ function RelatedRecords({ claim }) {
   );
 }
 
-export default function OverviewTab({ claim, onNavigate }) {
+export default function OverviewTab({ claim, related, onNavigate }) {
   const currency = claim.reserveCurrency || 'USD';
   const policyHref = claim.policyId ? recordHref('policy', claim.policyId) : '';
   const claimantHref = claim.claimantPartyId ? recordHref('party', claim.claimantPartyId) : '';
+  const policyEntry = related?.policy || {
+    state: 'idle',
+    text: claim.policyId ? shortId(claim.policyId) : ''
+  };
+  const claimantEntry = related?.party || {
+    state: 'idle',
+    text: claim.claimantPartyId ? shortId(claim.claimantPartyId) : ''
+  };
 
   return (
     <>
@@ -117,23 +129,27 @@ export default function OverviewTab({ claim, onNavigate }) {
             <dt>Policy</dt>
             <dd>
               {claim.policyId ? (
-                <>
-                  <a href={policyHref} onClick={openRecord} data-testid="overview-policy-link">
-                    Open policy record
-                  </a>
-                  <span className="eia-mono" style={{ marginLeft: 6 }}>{shortId(claim.policyId)}</span>
-                </>
+                <a
+                  href={policyHref}
+                  onClick={openRecord}
+                  data-testid="overview-policy-link"
+                  title="Open policy record"
+                >
+                  <RelatedLabel related={policyEntry} />
+                </a>
               ) : '—'}
             </dd>
             <dt>Claimant party</dt>
             <dd>
               {claim.claimantPartyId ? (
-                <>
-                  <a href={claimantHref} onClick={openRecord} data-testid="overview-claimant-link">
-                    Open claimant party record
-                  </a>
-                  <span className="eia-mono" style={{ marginLeft: 6 }}>{shortId(claim.claimantPartyId)}</span>
-                </>
+                <a
+                  href={claimantHref}
+                  onClick={openRecord}
+                  data-testid="overview-claimant-link"
+                  title="Open claimant party record"
+                >
+                  <RelatedLabel related={claimantEntry} />
+                </a>
               ) : '—'}
             </dd>
             <dt>Claim type</dt>
@@ -186,15 +202,24 @@ export default function OverviewTab({ claim, onNavigate }) {
         </p>
         <div className="links">
           {claim.policyId && (
-            <a href={policyHref} onClick={openRecord} data-testid="why-policy-link">Policy record</a>
+            <a href={policyHref} onClick={openRecord} data-testid="why-policy-link" title="Open policy record">
+              <RelatedLabel related={policyEntry} />
+            </a>
           )}
           {claim.claimantPartyId && (
-            <a href={claimantHref} onClick={openRecord} data-testid="why-claimant-link">Claimant record</a>
+            <a
+              href={claimantHref}
+              onClick={openRecord}
+              data-testid="why-claimant-link"
+              title="Open claimant party record"
+            >
+              <RelatedLabel related={claimantEntry} />
+            </a>
           )}
         </div>
       </section>
 
-      <RelatedRecords key={claim.policyId || 'no-policy'} claim={claim} />
+      <RelatedRecords key={claim.policyId || 'no-policy'} claim={claim} policy={policyEntry} />
 
       <section className="eia-card" aria-label="Book wall" style={{ marginTop: 14 }}>
         <h3>DIRECT book wall</h3>

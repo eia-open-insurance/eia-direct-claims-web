@@ -467,6 +467,11 @@ main [role="status"] {
 .eia-record-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
 .eia-record-title h2 { margin: 0 !important; font-size: 20px !important; color: var(--eia-navy); }
 .eia-record-subtitle { color: var(--eia-muted); font-size: 12px; margin: 3px 0 0; }
+.eia-record-subtitle a { color: var(--eia-blue); font-weight: 600; text-decoration: none; }
+.eia-record-subtitle a:hover { text-decoration: underline; }
+
+/* Quiet pending marker while a cross-link label is resolved. */
+.eia-link-pending { color: var(--eia-muted); font-size: 10px; }
 
 .eia-summary-grid {
   display: grid;

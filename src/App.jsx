@@ -5,8 +5,9 @@ import EntityPicker from './EntityPicker.jsx';
 import CoverageTab from './CoverageTab.jsx';
 import InjuryExposureTab from './InjuryExposureTab.jsx';
 import LitigationTab from './LitigationTab.jsx';
-import { navigate } from './navigation.js';
+import { navigate, recordHref } from './navigation.js';
 import OverviewTab from './OverviewTab.jsx';
+import { RelatedLabel, useRelatedLabels } from './related.jsx';
 import RecoveryLienTab from './RecoveryLienTab.jsx';
 import ReserveTab from './ReserveTab.jsx';
 import SettlementTab from './SettlementTab.jsx';
@@ -98,6 +99,11 @@ function writeUrl({ record = '', create = false, replace = false } = {}) {
   }
 }
 
+function openRecord(event) {
+  event.preventDefault();
+  navigate(event.currentTarget.getAttribute('href'));
+}
+
 function filterClaims(claims, filter) {
   const term = filter.trim().toLowerCase();
   if (!term) return claims;
@@ -130,6 +136,7 @@ export default function App() {
   const selectedClaimId = selectedClaim?.id || null;
   const currency = selectedClaim?.reserveCurrency || 'USD';
   const filteredClaims = filterClaims(claims, queueFilter);
+  const related = useRelatedLabels(selectedClaim);
 
   useEffect(() => {
     registerOpenRef.current = registerOpen;
@@ -420,7 +427,7 @@ export default function App() {
     if (!selectedClaim) return null;
     switch (activeTab) {
       case 'overview':
-        return <OverviewTab claim={selectedClaim} onNavigate={setActiveTab} />;
+        return <OverviewTab claim={selectedClaim} related={related} onNavigate={setActiveTab} />;
       case 'reserves':
         return <ReserveTab claim={selectedClaim} onChanged={handleRecordChanged} />;
       case 'coverage':
@@ -529,9 +536,36 @@ export default function App() {
                     <h2 className="eia-mono">{selectedClaim.claimNumber}</h2>
                     <span className={`eia-pill ${statusTone(selectedClaim.status)}`}>{selectedClaim.status}</span>
                   </div>
-                  <p className="eia-record-subtitle">
+                  <p className="eia-record-subtitle" data-testid="record-subtitle">
                     Loss date {selectedClaim.lossDate || '—'} · Reported {selectedClaim.reportDate || '—'} ·{' '}
-                    {humanize(selectedClaim.claimType)}
+                    {humanize(selectedClaim.claimType)}{' '}
+                    <br />
+                    Policy{' '}
+                    {selectedClaim.policyId ? (
+                      <a
+                        href={recordHref('policy', selectedClaim.policyId)}
+                        onClick={openRecord}
+                        data-testid="header-policy-link"
+                        title="Open policy record"
+                      >
+                        <RelatedLabel related={related.policy} />
+                      </a>
+                    ) : (
+                      '—'
+                    )}{' '}
+                    · Claimant{' '}
+                    {selectedClaim.claimantPartyId ? (
+                      <a
+                        href={recordHref('party', selectedClaim.claimantPartyId)}
+                        onClick={openRecord}
+                        data-testid="header-claimant-link"
+                        title="Open claimant party record"
+                      >
+                        <RelatedLabel related={related.party} />
+                      </a>
+                    ) : (
+                      '—'
+                    )}
                   </p>
                 </div>
                 <div className="eia-actions">

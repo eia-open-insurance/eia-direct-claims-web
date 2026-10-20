@@ -436,7 +436,7 @@ export default function App() {
           ? detailResult.reason
           : null;
     if (failure) {
-      setError(`Assignment saved, but the claim record could not be fully refreshed: ${failure.message}`);
+      setNotice(`Assignment saved. Refresh the claim to load the latest owner and audit entry.`);
     }
   }
 

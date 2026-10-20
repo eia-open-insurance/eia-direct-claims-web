@@ -5,6 +5,7 @@ import { api, BOOK, money } from './api.js';
 import ClaimProgress, { EMPTY_PROCESS } from './ClaimProgress.jsx';
 import EntityPicker from './EntityPicker.jsx';
 import CoverageTab from './CoverageTab.jsx';
+import DiaryNotesTab from './DiaryNotesTab.jsx';
 import InjuryExposureTab from './InjuryExposureTab.jsx';
 import LitigationTab from './LitigationTab.jsx';
 import { navigate, recordHref } from './navigation.js';
@@ -38,7 +39,8 @@ const TABS = [
   { id: 'coverage', label: 'Coverage' },
   { id: 'litigation', label: 'Litigation' },
   { id: 'settlements', label: 'Settlements' },
-  { id: 'recovery', label: 'Recovery & Liens' }
+  { id: 'recovery', label: 'Recovery & Liens' },
+  { id: 'diary', label: 'Diary & Notes' }
 ];
 
 const OVERLAY_STYLE = {
@@ -65,6 +67,13 @@ function sumBy(rows, statuses) {
   return rows
     .filter((row) => statuses.includes(row.status))
     .reduce((total, row) => total + (Number(row.amount) || 0), 0);
+}
+
+/** Open diary items exclude completed and cancelled tasks. */
+function countOpenTasks(rows) {
+  if (!Array.isArray(rows)) return null;
+  const closed = ['COMPLETED', 'CANCELLED'];
+  return rows.filter((row) => !closed.includes(String(row.status || 'OPEN').toUpperCase())).length;
 }
 
 function readUrlState() {
@@ -126,7 +135,7 @@ export default function App() {
   const [notice, setNotice] = useState('');
   const [registerBusy, setRegisterBusy] = useState(false);
   const [closing, setClosing] = useState(false);
-  const [summary, setSummary] = useState({ paidLoss: null, recoveries: null });
+  const [summary, setSummary] = useState({ paidLoss: null, recoveries: null, openTasks: null });
   const [processData, setProcessData] = useState(EMPTY_PROCESS);
   const [summaryNonce, setSummaryNonce] = useState(0);
   const [queueFilter, setQueueFilter] = useState('');
@@ -254,38 +263,50 @@ export default function App() {
   useEffect(() => {
     let alive = true;
     if (!selectedClaimId) {
-      setSummary({ paidLoss: null, recoveries: null });
+      setSummary({ paidLoss: null, recoveries: null, openTasks: null });
       setProcessData(EMPTY_PROCESS);
       return undefined;
     }
 
-    setSummary({ paidLoss: null, recoveries: null });
+    setSummary({ paidLoss: null, recoveries: null, openTasks: null });
     setProcessData(EMPTY_PROCESS);
     Promise.allSettled([
       api.coverage.get(selectedClaimId),
       api.reserves.get(selectedClaimId),
       api.litigation.list(selectedClaimId),
       api.settlements.list(selectedClaimId),
-      api.recoveries.list(selectedClaimId)
-    ]).then(([coverageResult, reservesResult, litigationResult, settlementsResult, recoveriesResult]) => {
-      if (!alive) return;
-      const coverage = coverageResult.status === 'fulfilled' ? coverageResult.value : null;
-      const reserves = reservesResult.status === 'fulfilled' ? reservesResult.value : null;
-      const litigation = litigationResult.status === 'fulfilled' ? litigationResult.value : null;
-      const settlements = settlementsResult.status === 'fulfilled' ? settlementsResult.value : null;
-      const recoveries = recoveriesResult.status === 'fulfilled' ? recoveriesResult.value : null;
-      setProcessData({
-        coverage,
-        reserves,
-        litigation: Array.isArray(litigation) ? litigation : [],
-        settlements: Array.isArray(settlements) ? settlements : [],
-        recoveries: Array.isArray(recoveries) ? recoveries : []
-      });
-      setSummary({
-        paidLoss: sumBy(settlements, ['EXECUTED', 'PAID']),
-        recoveries: sumBy(recoveries, ['RECEIVED'])
-      });
-    });
+      api.recoveries.list(selectedClaimId),
+      api.tasks.list(selectedClaimId)
+    ]).then(
+      ([
+        coverageResult,
+        reservesResult,
+        litigationResult,
+        settlementsResult,
+        recoveriesResult,
+        tasksResult
+      ]) => {
+        if (!alive) return;
+        const coverage = coverageResult.status === 'fulfilled' ? coverageResult.value : null;
+        const reserves = reservesResult.status === 'fulfilled' ? reservesResult.value : null;
+        const litigation = litigationResult.status === 'fulfilled' ? litigationResult.value : null;
+        const settlements = settlementsResult.status === 'fulfilled' ? settlementsResult.value : null;
+        const recoveries = recoveriesResult.status === 'fulfilled' ? recoveriesResult.value : null;
+        const tasks = tasksResult.status === 'fulfilled' ? tasksResult.value : null;
+        setProcessData({
+          coverage,
+          reserves,
+          litigation: Array.isArray(litigation) ? litigation : [],
+          settlements: Array.isArray(settlements) ? settlements : [],
+          recoveries: Array.isArray(recoveries) ? recoveries : []
+        });
+        setSummary({
+          paidLoss: sumBy(settlements, ['EXECUTED', 'PAID']),
+          recoveries: sumBy(recoveries, ['RECEIVED']),
+          openTasks: countOpenTasks(tasks)
+        });
+      }
+    );
 
     return () => {
       alive = false;
@@ -456,6 +477,8 @@ export default function App() {
         return <SettlementTab claim={selectedClaim} onChanged={handleRecordChanged} />;
       case 'recovery':
         return <RecoveryLienTab claim={selectedClaim} onChanged={handleRecordChanged} />;
+      case 'diary':
+        return <DiaryNotesTab claim={selectedClaim} onChanged={handleRecordChanged} />;
       default:
         return <InjuryExposureTab claim={selectedClaim} />;
     }
@@ -634,6 +657,13 @@ export default function App() {
                         )}
                   </div>
                   <div className="eia-metric-label">Authorized limit before escalation</div>
+                </div>
+                <div className="eia-card">
+                  <h3>Open tasks</h3>
+                  <div className="value" data-testid="summary-open-tasks">
+                    {summary.openTasks == null ? '—' : summary.openTasks}
+                  </div>
+                  <div className="eia-metric-label">Open diary items</div>
                 </div>
               </div>
 

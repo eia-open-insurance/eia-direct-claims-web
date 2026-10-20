@@ -45,7 +45,12 @@ export function ErrorText({ children }) {
   return <p role="alert" style={{ margin: '8px 0 0' }}>{children}</p>;
 }
 
-export function DataTable({ columns, rows = [], emptyText }) {
+export function DataTable({ columns, rows = [], emptyText, rowClassName }) {
+  const classNameFor = (row) => {
+    if (typeof rowClassName === 'function') return rowClassName(row) || undefined;
+    return rowClassName || undefined;
+  };
+
   return (
     <div className="eia-table-wrap" style={{ marginTop: 10 }}>
       <table className="eia-table" cellPadding="8">
@@ -58,7 +63,7 @@ export function DataTable({ columns, rows = [], emptyText }) {
         </thead>
         <tbody>
           {rows.map((row, index) => (
-            <tr key={row.id || index}>
+            <tr key={row.id || index} className={classNameFor(row)}>
               {columns.map((column) => (
                 <td key={column.key} align={column.align || 'left'}>
                   {column.render ? column.render(row) : row[column.key]}

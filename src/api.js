@@ -126,6 +126,21 @@ export const api = {
         method: 'PATCH',
         body: JSON.stringify(body)
       })
+  },
+  tasks: {
+    list: (claimId) => request(`/api/v1/claims/${claimId}/tasks`),
+    create: (claimId, body) =>
+      request(`/api/v1/claims/${claimId}/tasks`, { method: 'POST', body: JSON.stringify(body) }),
+    update: (claimId, taskId, body) =>
+      request(`/api/v1/claims/${claimId}/tasks/${taskId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body)
+      })
+  },
+  notes: {
+    list: (claimId) => request(`/api/v1/claims/${claimId}/notes`),
+    create: (claimId, body) =>
+      request(`/api/v1/claims/${claimId}/notes`, { method: 'POST', body: JSON.stringify(body) })
   }
 };
 

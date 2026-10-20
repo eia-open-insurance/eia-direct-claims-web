@@ -72,7 +72,7 @@ function sumBy(rows, statuses) {
 /** Open diary items exclude completed and cancelled tasks. */
 function countOpenTasks(rows) {
   if (!Array.isArray(rows)) return null;
-  const closed = ['COMPLETED', 'CANCELLED'];
+  const closed = ['COMPLETE', 'CANCELLED'];
   return rows.filter((row) => !closed.includes(String(row.status || 'OPEN').toUpperCase())).length;
 }
 

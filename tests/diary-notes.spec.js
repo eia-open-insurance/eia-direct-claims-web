@@ -47,7 +47,7 @@ const COMPLETED_TASK = {
   description: 'Quarterly reserve review.',
   dueDate: '2099-12-31',
   priority: 'NORMAL',
-  status: 'COMPLETED',
+  status: 'COMPLETE',
   assignedTo: 'B. Examiner',
   version: 1,
   createdAt: '2026-03-18T09:12:00Z',
@@ -58,7 +58,7 @@ const COMPLETED_TASK = {
 const NEWER_NOTE = {
   id: '0192f3a4-2b7e-7d1f-a9c4-3e8b5f0c9d81',
   noteNumber: 'NOT-2026-0002',
-  noteType: 'CONTACT',
+  noteType: 'DIARY',
   body: 'Spoke with the claimant about the medical authorization.',
   author: 'Dana Handler',
   createdAt: '2026-04-02T14:30:00Z'
@@ -180,7 +180,7 @@ async function installMocks(page) {
         version: (existing?.version || 0) + 1,
         updatedAt: '2026-10-20T12:00:00Z',
         completedAt:
-          state.taskPatchBody.status === 'COMPLETED' ? '2026-10-20T12:00:00Z' : null
+          state.taskPatchBody.status === 'COMPLETE' ? '2026-10-20T12:00:00Z' : null
       };
       state.tasks = state.tasks.map((task) => (task.id === resourceId ? updated : task));
       await fulfillJson(route, updated);
@@ -276,7 +276,7 @@ test('loads diary tasks and notes and visibly marks overdue tasks', async ({ pag
   const firstNote = page.getByTestId('note-item').first();
   await expect(firstNote).toContainText('NOT-2026-0002');
   await expect(firstNote).toContainText(NEWER_NOTE.body);
-  await expect(firstNote).toContainText('CONTACT');
+  await expect(firstNote).toContainText('DIARY');
   await expect(firstNote).toContainText('Dana Handler');
 
   // The existing tabs, stepper, and book wall survive the new workspace.
@@ -335,7 +335,7 @@ test('completes and reopens a task with its current version and refreshes the su
   await page.getByRole('button', { name: 'Complete TSK-2026-0001' }).click();
 
   await expect(page.getByRole('button', { name: 'Reopen TSK-2026-0001' })).toBeVisible();
-  expect(state.taskPatchBody).toEqual({ status: 'COMPLETED', version: 3 });
+  expect(state.taskPatchBody).toEqual({ status: 'COMPLETE', version: 3 });
   expect(state.taskPatchPath).toBe(`/api/v1/claims/${CLAIM_ID}/tasks/${OVERDUE_TASK.id}`);
   expect(
     state.requests.find(
@@ -347,7 +347,7 @@ test('completes and reopens a task with its current version and refreshes the su
   await expect(page.getByTestId('summary-open-tasks')).toHaveText('0');
   await expect(page.locator('tr.eia-diary-overdue')).toHaveCount(0);
   const completedRow = page.locator('tr', { hasText: 'TSK-2026-0001' });
-  await expect(completedRow).toContainText('COMPLETED');
+  await expect(completedRow).toContainText('COMPLETE');
 
   await page.getByRole('button', { name: 'Reopen TSK-2026-0001' }).click();
   await expect(page.getByRole('button', { name: 'Complete TSK-2026-0001' })).toBeVisible();
@@ -409,3 +409,4 @@ test('shows problem+json errors for a 409 task conflict and a rejected task', as
     'Task title is not allowed on a closed claim.'
   );
 });
+

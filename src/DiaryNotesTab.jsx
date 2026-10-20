@@ -20,24 +20,19 @@ const TASK_PRIORITIES = [
   ['LOW', 'Low'],
   ['NORMAL', 'Normal'],
   ['HIGH', 'High'],
-  ['URGENT', 'Urgent'],
-  ['CATASTROPHE', 'Catastrophe']
+  ['URGENT', 'Urgent']
 ];
 
 const NOTE_TYPES = [
   ['GENERAL', 'General'],
-  ['FNOL', 'FNOL'],
-  ['CONTACT', 'Contact'],
-  ['INVESTIGATION', 'Investigation'],
+  ['DIARY', 'Diary'],
   ['COVERAGE', 'Coverage'],
   ['RESERVE', 'Reserve'],
   ['LITIGATION', 'Litigation'],
-  ['SETTLEMENT', 'Settlement'],
-  ['PAYMENT', 'Payment'],
-  ['DIARY', 'Diary']
+  ['SETTLEMENT', 'Settlement']
 ];
 
-const COMPLETED_TASK_STATUSES = ['COMPLETED', 'CANCELLED'];
+const COMPLETED_TASK_STATUSES = ['COMPLETE', 'CANCELLED'];
 
 const OVERLAY_STYLE = {
   position: 'fixed',
@@ -69,14 +64,14 @@ function isOverdue(task) {
 function taskTone(task) {
   if (isOverdue(task)) return 'red';
   const status = upper(task.status);
-  if (status === 'COMPLETED') return 'green';
+  if (status === 'COMPLETE') return 'green';
   if (status === 'CANCELLED') return 'amber';
   return 'blue';
 }
 
 function priorityTone(priority) {
   const value = upper(priority);
-  if (value === 'URGENT' || value === 'CATASTROPHE') return 'red';
+  if (value === 'URGENT') return 'red';
   if (value === 'HIGH') return 'amber';
   return 'blue';
 }
@@ -86,11 +81,9 @@ function noteTone(noteType) {
     case 'COVERAGE':
       return 'direct';
     case 'RESERVE':
-    case 'PAYMENT':
     case 'SETTLEMENT':
       return 'warn';
     case 'DIARY':
-    case 'INVESTIGATION':
       return 'ok';
     default:
       return 'direct';
@@ -129,7 +122,7 @@ function describeError(cause) {
 }
 
 function taskActionLabel(task) {
-  return upper(task.status) === 'COMPLETED' ? 'Reopen' : 'Complete';
+  return upper(task.status) === 'COMPLETE' ? 'Reopen' : 'Complete';
 }
 
 function noteFallback(payload) {
@@ -276,7 +269,7 @@ export default function DiaryNotesTab({ claim, onChanged }) {
   }
 
   async function toggleTask(task) {
-    const status = upper(task.status) === 'COMPLETED' ? 'OPEN' : 'COMPLETED';
+    const status = upper(task.status) === 'COMPLETE' ? 'OPEN' : 'COMPLETE';
     setBusyId(task.id);
     setError('');
     try {
@@ -420,7 +413,7 @@ export default function DiaryNotesTab({ claim, onChanged }) {
                 label: 'Action',
                 render: (row) => {
                   if (upper(row.status) === 'CANCELLED') return <span className="eia-muted">—</span>;
-                  const reopening = upper(row.status) === 'COMPLETED';
+                  const reopening = upper(row.status) === 'COMPLETE';
                   return (
                     <button
                       type="button"
@@ -630,3 +623,4 @@ export default function DiaryNotesTab({ claim, onChanged }) {
     </>
   );
 }
+

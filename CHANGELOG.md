@@ -21,6 +21,14 @@ The format is based on Keep a Changelog and the project uses Semantic Versioning
   key-value rows, context panel, and related policy link. Lookups are non-blocking and fall
   back to the short UUID when detail is unavailable; policy lookups carry the DIRECT book
   header and are not issued for assumed records.
+- Claim assignment UX: the record header, **Assigned to** summary card, and queue rows show
+  the assigned adjuster and team (or **Unassigned**). **Assign** opens a dialog pre-filled
+  with the current assignment or `A. Adjuster`, posts
+  `PATCH /api/v1/claims/{claimId}/assignment` with `assignedAdjuster`, `assignedTeam`, and
+  `expectedVersion`, refreshes the detail and queue on success, and keeps the dialog open with
+  a **Reload claim** action on a 409 stale version. The queue filter matches assignee and
+  team; the context panel states that ownership only routes queue/workload and does not
+  change coverage, reserves, payments, or other financials.
 - Claim-to-payment hand-off: authorized, executed, approved, and paid settlements expose a
   **Create payment** action that navigates to the Payment workbench with the DIRECT claim
   source (`sourceType`, `sourceId`, `sourceReference`), settlement amount and currency, and

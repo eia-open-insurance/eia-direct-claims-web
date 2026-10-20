@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api, BOOK, money } from './api.js';
+import { assignmentText } from './ClaimAssignment.jsx';
 import { navigate, recordHref } from './navigation.js';
 import { RelatedLabel } from './related.jsx';
 import { humanize, shortId, statusTone } from './ui.jsx';
@@ -103,6 +104,7 @@ function RelatedRecords({ claim, policy }) {
 
 export default function OverviewTab({ claim, related, onNavigate }) {
   const currency = claim.reserveCurrency || 'USD';
+  const assignment = assignmentText(claim);
   const policyHref = claim.policyId ? recordHref('policy', claim.policyId) : '';
   const claimantHref = claim.claimantPartyId ? recordHref('party', claim.claimantPartyId) : '';
   const policyEntry = related?.policy || {
@@ -126,6 +128,8 @@ export default function OverviewTab({ claim, related, onNavigate }) {
             <dd><span className={`eia-pill ${statusTone(claim.status)}`}>{claim.status}</span></dd>
             <dt>Book</dt>
             <dd><span className="eia-badge direct">{BOOK}</span></dd>
+            <dt>Assigned to</dt>
+            <dd data-testid="overview-assignment">{assignment.display}</dd>
             <dt>Policy</dt>
             <dd>
               {claim.policyId ? (
@@ -199,6 +203,11 @@ export default function OverviewTab({ claim, related, onNavigate }) {
           the loss responds. Cessions and reinsurance recoveries are derived from the policy, not created on the
           claim. Reserves and settlements recorded here drive payment instructions and the financial events that
           post downstream.
+        </p>
+        <p>
+          Ownership is an operational routing decision: the assigned adjuster and team determine the queue and
+          workload that carry the claim. Assignment does not change coverage, reserves, settlements, payments,
+          or any other financial outcome.
         </p>
         <p>
           Authorized or executed settlements can be handed to Payment from the Settlements tab. Payment owns

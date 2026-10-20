@@ -2,6 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import './ui.css';
 import './ui-overrides.css';
 import { api, BOOK, money } from './api.js';
+import AssignmentDialog, {
+  assignmentFilterValues,
+  assignmentText,
+  readAssignment
+} from './ClaimAssignment.jsx';
 import ClaimProgress, { EMPTY_PROCESS } from './ClaimProgress.jsx';
 import EntityPicker from './EntityPicker.jsx';
 import CoverageTab from './CoverageTab.jsx';
@@ -119,8 +124,14 @@ function filterClaims(claims, filter) {
   const term = filter.trim().toLowerCase();
   if (!term) return claims;
   return claims.filter((claim) =>
-    [claim.claimNumber, claim.claimType, humanize(claim.claimType), claim.causeCode, claim.status]
-      .some((value) => String(value || '').toLowerCase().includes(term))
+    [
+      claim.claimNumber,
+      claim.claimType,
+      humanize(claim.claimType),
+      claim.causeCode,
+      claim.status,
+      ...assignmentFilterValues(claim)
+    ].some((value) => String(value || '').toLowerCase().includes(term))
   );
 }
 
@@ -131,6 +142,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [registerOpen, setRegisterOpen] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [registerBusy, setRegisterBusy] = useState(false);
@@ -148,6 +160,7 @@ export default function App() {
   const selectedClaimId = selectedClaim?.id || null;
   const currency = selectedClaim?.reserveCurrency || 'USD';
   const filteredClaims = filterClaims(claims, queueFilter);
+  const selectedAssignment = assignmentText(selectedClaim);
   const related = useRelatedLabels(selectedClaim);
 
   useEffect(() => {
@@ -371,8 +384,94 @@ export default function App() {
     }
   }
 
+  function upsertClaim(next) {
+    if (!next?.id) return;
+    setClaims((current) => {
+      const index = current.findIndex((row) => row.id === next.id);
+      if (index < 0) return [next, ...current];
+      const copy = current.slice();
+      copy[index] = { ...current[index], ...next };
+      return copy;
+    });
+  }
+
+  async function handleAssigned(updated, submitted) {
+    const claimId = selectedClaim?.id;
+    const claimNumber = selectedClaim?.claimNumber;
+    if (!claimId) return;
+
+    setAssignOpen(false);
+    setError('');
+    setNotice(`${claimNumber || 'Claim'} assigned to ${assignmentText(submitted).display}.`);
+
+    // Show the server answer immediately, then reconcile with the refreshed
+    // claim detail and queue list.
+    const serverAssignment = readAssignment(updated);
+    setClaims((current) =>
+      current.map((row) => {
+        if (row.id !== claimId) return row;
+        return {
+          ...row,
+          ...(updated?.id === claimId ? updated : {}),
+          assignedAdjuster: serverAssignment.assignedAdjuster || submitted.assignedAdjuster,
+          assignedTeam: serverAssignment.assignedTeam || submitted.assignedTeam
+        };
+      })
+    );
+    refreshSummary();
+
+    // Refresh both sources independently so a list failure cannot hide the
+    // refreshed assignment detail (or the other way around).
+    const [listResult, detailResult] = await Promise.allSettled([
+      load(),
+      api.claims.get(claimId)
+    ]);
+    if (detailResult.status === 'fulfilled' && detailResult.value?.id) {
+      upsertClaim(detailResult.value);
+    }
+    const failure =
+      listResult.status === 'rejected'
+        ? listResult.reason
+        : detailResult.status === 'rejected'
+          ? detailResult.reason
+          : null;
+    if (failure) {
+      setError(`Assignment saved, but the claim record could not be fully refreshed: ${failure.message}`);
+    }
+  }
+
+  /** Loads the queue and detail again so a stale dialog can retry. */
+  async function reloadClaimRecord(claimId) {
+    const [listResult, detailResult] = await Promise.allSettled([
+      load(),
+      api.claims.get(claimId)
+    ]);
+    const rows = listResult.status === 'fulfilled' ? listResult.value : [];
+    const fresh = detailResult.status === 'fulfilled' ? detailResult.value : null;
+    const fallback = Array.isArray(rows) ? rows.find((row) => row.id === claimId) : null;
+    const resolved = fresh?.id ? fresh : fallback;
+    if (resolved) upsertClaim(resolved);
+    refreshSummary();
+    if (!resolved && listResult.status === 'rejected' && detailResult.status === 'rejected') {
+      throw listResult.reason;
+    }
+    return resolved;
+  }
+
+  function openAssignment() {
+    if (!selectedClaim) return;
+    setError('');
+    setNotice('');
+    setAssignOpen(true);
+  }
+
+  function closeAssignment() {
+    setAssignOpen(false);
+  }
+
   function selectClaim(claim) {
     if (claim.id !== selectedId) setActiveTab('overview');
+    setAssignOpen(false);
     setSelectedId(claim.id);
     setError('');
     setNotice('');
@@ -524,6 +623,7 @@ export default function App() {
                 onChange={(event) => setQueueFilter(event.target.value)}
                 placeholder="Filter claims by number, type, cause, or status…"
                 aria-label="Filter claims by number, type, cause, or status"
+                title="Also matches the assigned adjuster and team"
                 autoComplete="off"
                 data-testid="claim-filter"
               />
@@ -542,22 +642,28 @@ export default function App() {
                 {loading ? '…' : queueFilter ? `${filteredClaims.length} of ${claims.length}` : claims.length}
               </span>
             </div>
-            {filteredClaims.map((claim) => (
-              <button
-                key={claim.id}
-                type="button"
-                className={claim.id === selectedId ? 'selected' : ''}
-                aria-current={claim.id === selectedId ? 'true' : undefined}
-                onClick={() => selectClaim(claim)}
-              >
-                <span className="record-primary">{claim.claimNumber}</span>
-                <span className="record-secondary">Claimant {shortId(claim.claimantPartyId)}</span>
-                <span className="record-secondary" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span className={`eia-pill ${statusTone(claim.status)}`}>{claim.status}</span>
-                  <span>Loss {claim.lossDate || '—'}</span>
-                </span>
-              </button>
-            ))}
+            {filteredClaims.map((claim) => {
+              const owner = assignmentText(claim);
+              return (
+                <button
+                  key={claim.id}
+                  type="button"
+                  className={claim.id === selectedId ? 'selected' : ''}
+                  aria-current={claim.id === selectedId ? 'true' : undefined}
+                  onClick={() => selectClaim(claim)}
+                >
+                  <span className="record-primary">{claim.claimNumber}</span>
+                  <span className="record-secondary">Claimant {shortId(claim.claimantPartyId)}</span>
+                  <span className="record-secondary" data-testid="queue-assignee">
+                    {owner.assignedAdjuster ? `Assigned to ${owner.display}` : 'Unassigned'}
+                  </span>
+                  <span className="record-secondary" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <span className={`eia-pill ${statusTone(claim.status)}`}>{claim.status}</span>
+                    <span>Loss {claim.lossDate || '—'}</span>
+                  </span>
+                </button>
+              );
+            })}
             {!loading && claims.length > 0 && filteredClaims.length === 0 && (
               <div className="empty">No claims match “{queueFilter.trim()}”. Clear the filter to see the full queue.</div>
             )}
@@ -608,8 +714,26 @@ export default function App() {
                       '—'
                     )}
                   </p>
+                  <p className="eia-record-subtitle" data-testid="record-assignment">
+                    {selectedAssignment.assignedAdjuster ? (
+                      <>
+                        Assigned to <strong>{selectedAssignment.assignedAdjuster}</strong>
+                        {selectedAssignment.assignedTeam ? ` · ${selectedAssignment.assignedTeam}` : ''}
+                      </>
+                    ) : (
+                      'Unassigned'
+                    )}
+                  </p>
                 </div>
                 <div className="eia-actions">
+                  <button
+                    type="button"
+                    className="eia-btn-secondary"
+                    onClick={openAssignment}
+                    aria-haspopup="dialog"
+                  >
+                    Assign
+                  </button>
                   <button type="button" className="eia-btn-ghost" onClick={refresh}>
                     Refresh record
                   </button>
@@ -625,6 +749,17 @@ export default function App() {
               </div>
 
               <div className="eia-summary-grid">
+                <div className="eia-card">
+                  <h3>Assigned to</h3>
+                  <div className="value" data-testid="summary-assigned-to">
+                    {selectedAssignment.assignedAdjuster || 'Unassigned'}
+                  </div>
+                  <div className="eia-metric-label" data-testid="summary-assigned-team">
+                    {selectedAssignment.assignedAdjuster
+                      ? selectedAssignment.assignedTeam || 'No team assigned'
+                      : 'Ownership queue'}
+                  </div>
+                </div>
                 <div className="eia-card">
                   <h3>Current reserve</h3>
                   <div className="value" data-testid="summary-current-reserve">
@@ -711,6 +846,15 @@ export default function App() {
           )}
         </section>
       </div>
+
+      {assignOpen && selectedClaim && (
+        <AssignmentDialog
+          claim={selectedClaim}
+          onClose={closeAssignment}
+          onAssigned={handleAssigned}
+          onReload={() => reloadClaimRecord(selectedClaim.id)}
+        />
+      )}
 
       {registerOpen && (
         <div

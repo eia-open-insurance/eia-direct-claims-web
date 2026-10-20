@@ -95,7 +95,17 @@ export const api = {
       request(`/api/v1/claims/search?q=${encodeURIComponent(query || '')}&limit=${limit}`),
     create: (body) => request('/api/v1/claims', { method: 'POST', body: JSON.stringify(body) }),
     close: (claimId, body = {}) =>
-      request(`/api/v1/claims/${claimId}/close`, { method: 'POST', body: JSON.stringify(body) })
+      request(`/api/v1/claims/${claimId}/close`, { method: 'POST', body: JSON.stringify(body) }),
+    /**
+     * Change operational ownership only. `expectedVersion` is the claim
+     * version the caller read; a stale version is rejected with 409.
+     */
+    assign: (claimId, body, actor) =>
+      request(`/api/v1/claims/${claimId}/assignment`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+        headers: actor ? { 'X-EIA-Actor': actor } : {}
+      })
   },
   policies: {
     /** Policy detail is book-owned, so the DIRECT wall applies. */

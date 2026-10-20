@@ -40,6 +40,26 @@ injuries and exposures, reserve history (derived current reserve plus the append
 ledger), coverage, litigation, settlements, and recoveries and liens. Money is displayed from
 the decimal strings returned by the domain.
 
+Ownership is visible in the record header, the **Assigned to** summary card, and each queue
+row (`assignedAdjuster` / `assignedTeam`, or **Unassigned**). **Assign** opens a dialog
+pre-filled with the current assignment or the current user (`A. Adjuster`) and the team.
+Saving sends
+
+```http
+PATCH /api/v1/claims/{claimId}/assignment
+X-EIA-Book: DIRECT
+X-EIA-Actor: A. Adjuster
+
+{ "assignedAdjuster": "…", "assignedTeam": "DIRECT_CLAIMS", "expectedVersion": 3 }
+```
+
+with the claim version read from the record. A stale version returns 409; the dialog keeps
+the user's input, explains that the claim changed, and offers **Reload claim** so the latest
+version can be read before retrying. On success the claim detail and queue are refreshed. The
+queue filter also matches the assigned adjuster and team. Assignment is an operational
+routing decision only: it determines the queue and workload, and never changes coverage,
+reserves, settlements, payments, or other financial data.
+
 An authorized or executed settlement can be handed to the **Payment** remote through
 `/payment?new=1&sourceType=DIRECT_CLAIM&sourceId=…&sourceReference=…&amount=…&currency=…&payeePartyId=…`.
 Direct Claims never creates the payment itself; the Payment workbench confirms the source and
@@ -50,8 +70,9 @@ saves it. The Settlements tab lists related payments via
 
 - `npm run build` - production webpack bundle.
 - `npx playwright test` - registration, reserve-history, coverage, settlement-to-payment
-  hand-off, related-payments, and tab-set flows with a mocked API; every request asserts the
-  DIRECT book header.
+  hand-off, related-payments, assignment (payload/version, header/summary/queue refresh,
+  unassigned and pre-filled states, queue filtering, and 409 stale reload), and tab-set flows
+  with a mocked API; every request asserts the DIRECT book header.
 
 ## Notes
 

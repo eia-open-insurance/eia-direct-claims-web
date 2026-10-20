@@ -1,34 +1,39 @@
 import React from 'react';
 
-export const panelStyle = {
-  border: '1px solid #ddd',
-  borderRadius: 8,
-  padding: 16,
-  marginBottom: 20
-};
+const STATUS_TONES = [
+  ['green', ['CLOSED', 'PAID', 'SETTLED']],
+  ['red', ['DENIED', 'WITHDRAWN', 'DISMISSED']],
+  ['amber', ['IN_LITIGATION', 'IN_SETTLEMENT', 'COVERAGE_REVIEW', 'RESERVED']]
+];
 
-export const gridStyle = {
-  display: 'grid',
-  gap: 10,
-  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-  alignItems: 'end',
-  marginBottom: 12
-};
+export function statusTone(status) {
+  const match = STATUS_TONES.find(([, statuses]) => statuses.includes(status));
+  return match ? match[0] : 'blue';
+}
 
-export const tableStyle = { width: '100%', borderCollapse: 'collapse' };
+export function shortId(value) {
+  if (!value) return '—';
+  const text = String(value);
+  return text.length > 8 ? `${text.slice(0, 8)}…` : text;
+}
+
+export function humanize(value) {
+  if (!value) return '—';
+  return String(value).replace(/_/g, ' ');
+}
 
 export function Panel({ title, children }) {
   return (
-    <section aria-label={title} style={panelStyle}>
-      <h3 style={{ marginTop: 0, fontSize: 16 }}>{title}</h3>
+    <section className="eia-card" aria-label={title} style={{ marginBottom: 16 }}>
+      <h3>{title}</h3>
       {children}
     </section>
   );
 }
 
-export function Field({ label, children }) {
+export function Field({ label, children, className = '' }) {
   return (
-    <label style={{ display: 'grid', gap: 4, fontSize: 14 }}>
+    <label className={`eia-field ${className}`.trim()}>
       <span>{label}</span>
       {children}
     </label>
@@ -37,35 +42,37 @@ export function Field({ label, children }) {
 
 export function ErrorText({ children }) {
   if (!children) return null;
-  return <p role="alert" style={{ color: '#b00020', margin: '8px 0' }}>{children}</p>;
+  return <p role="alert" style={{ margin: '8px 0 0' }}>{children}</p>;
 }
 
-export function DataTable({ columns, rows, emptyText }) {
+export function DataTable({ columns, rows = [], emptyText }) {
   return (
-    <table style={tableStyle} cellPadding="8">
-      <thead>
-        <tr>
-          {columns.map((column) => (
-            <th key={column.key} align={column.align || 'left'}>{column.label}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row, index) => (
-          <tr key={row.id || index} style={{ borderTop: '1px solid #ddd' }}>
+    <div className="eia-table-wrap" style={{ marginTop: 10 }}>
+      <table className="eia-table" cellPadding="8">
+        <thead>
+          <tr>
             {columns.map((column) => (
-              <td key={column.key} align={column.align || 'left'}>
-                {column.render ? column.render(row) : row[column.key]}
-              </td>
+              <th key={column.key} align={column.align || 'left'}>{column.label}</th>
             ))}
           </tr>
-        ))}
-        {rows.length === 0 && (
-          <tr>
-            <td colSpan={columns.length} style={{ color: '#666' }}>{emptyText}</td>
-          </tr>
-        )}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={row.id || index}>
+              {columns.map((column) => (
+                <td key={column.key} align={column.align || 'left'}>
+                  {column.render ? column.render(row) : row[column.key]}
+                </td>
+              ))}
+            </tr>
+          ))}
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={columns.length} className="eia-muted">{emptyText}</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }

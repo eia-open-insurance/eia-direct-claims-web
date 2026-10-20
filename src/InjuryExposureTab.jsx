@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api, today } from './api.js';
-import { DataTable, ErrorText, Field, gridStyle, Panel } from './ui.jsx';
+import { DataTable, ErrorText, Field, Panel } from './ui.jsx';
 
 const EMPTY_INJURY = {
   injuryType: 'MESOTHELIOMA',
@@ -112,7 +112,7 @@ export default function InjuryExposureTab({ claim }) {
           rows={injuries}
           emptyText="No injury recorded."
         />
-        <form onSubmit={submitInjury} style={{ ...gridStyle, marginTop: 16 }}>
+        <form onSubmit={submitInjury} className="eia-form-grid" style={{ marginTop: 16 }}>
           <Field label="Injury type">
             <select value={injuryForm.injuryType} onChange={update(setInjuryForm, 'injuryType')}>
               <option value="MESOTHELIOMA">Mesothelioma</option>
@@ -167,7 +167,7 @@ export default function InjuryExposureTab({ claim }) {
           rows={exposures}
           emptyText="No exposure recorded."
         />
-        <form onSubmit={submitExposure} style={{ ...gridStyle, marginTop: 16 }}>
+        <form onSubmit={submitExposure} className="eia-form-grid" style={{ marginTop: 16 }}>
           <Field label="Exposure type">
             <select value={exposureForm.exposureType} onChange={update(setExposureForm, 'exposureType')}>
               <option value="SUBSTANCE">Substance</option>

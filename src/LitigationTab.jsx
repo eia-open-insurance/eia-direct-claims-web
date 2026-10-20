@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api, today } from './api.js';
-import { DataTable, ErrorText, Field, gridStyle, Panel } from './ui.jsx';
+import { DataTable, ErrorText, Field, Panel } from './ui.jsx';
 
 const EMPTY = {
   matterType: 'DEFENSE',
@@ -71,7 +71,7 @@ export default function LitigationTab({ claim }) {
       </Panel>
 
       <Panel title="Open a litigation matter">
-        <form onSubmit={submit} style={gridStyle}>
+        <form onSubmit={submit} className="eia-form-grid">
           <Field label="Matter type">
             <select value={form.matterType} onChange={update('matterType')}>
               <option value="DEFENSE">Defense</option>

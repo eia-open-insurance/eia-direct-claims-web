@@ -55,21 +55,35 @@ test('renders the Direct Claims workbench, sends the DIRECT book header, and reg
     });
   });
 
+  await page.route('**/api/v1/claims/**', async (route) => {
+    bookHeaders.push(route.request().headers()['x-eia-book']);
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+
   await page.goto('/');
 
-  await expect(page.getByRole('heading', { name: 'Direct Claims' })).toBeVisible();
-  await expect(page.getByText('Book: DIRECT')).toBeVisible();
-  await expect(page.getByText('CLM-2026-0000001')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Direct claims' })).toBeVisible();
+  await expect(page.getByText('Claims · Direct book')).toBeVisible();
+  await expect(page.getByText('DIRECT book', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'CLM-2026-0000001' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /CLM-2026-0000001/ })).toBeVisible();
+  await expect(page.getByTestId('summary-current-reserve')).toHaveText(/125,000\.00/);
 
-  await page.getByLabel('Policy ID').fill('22222222-2222-7222-8222-222222222222');
-  await page.getByLabel('Claimant party ID').fill('33333333-3333-7333-8333-333333333333');
-  await page.getByLabel('Loss date').fill('2026-04-01');
-  await page.getByLabel('Report date').fill('2026-04-02');
-  await page.getByLabel('Cause code').fill('GL');
-  await page.getByLabel('Reserve amount').fill('250000');
   await page.getByRole('button', { name: 'Register claim' }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel('Policy ID').fill('22222222-2222-7222-8222-222222222222');
+  await dialog.getByLabel('Claimant party ID').fill('33333333-3333-7333-8333-333333333333');
+  await dialog.getByLabel('Loss date').fill('2026-04-01');
+  await dialog.getByLabel('Report date').fill('2026-04-02');
+  await dialog.getByLabel('Cause code').fill('GL');
+  await dialog.getByLabel('Reserve amount').fill('250000');
+  await dialog.getByRole('button', { name: 'Register claim' }).click();
 
-  await expect(page.getByText('CLM-2026-0000002')).toBeVisible();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('heading', { name: 'CLM-2026-0000002' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /CLM-2026-0000002/ })).toBeVisible();
+  await expect(page.getByTestId('summary-current-reserve')).toHaveText(/250,000\.00/);
   expect(bookHeaders.length).toBeGreaterThan(1);
   expect(bookHeaders.every((value) => value === 'DIRECT')).toBeTruthy();
 });

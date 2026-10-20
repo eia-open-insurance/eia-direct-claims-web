@@ -146,8 +146,9 @@ test('posts a reserve change and shows the derived reserve history', async ({ pa
   await detailRoute(page, state);
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open claim' }).first().click();
-  await page.getByRole('button', { name: 'Reserve history' }).click();
+  await expect(page.getByRole('heading', { name: CLAIM.claimNumber })).toBeVisible();
+  await page.getByRole('button', { name: /CLM-2026-0000001/ }).click();
+  await page.getByRole('tab', { name: 'Reserve History', exact: true }).click();
 
   await expect(page.getByTestId('current-reserve')).toHaveText(/0\.00/);
 
@@ -175,8 +176,9 @@ test('records a coverage decision in the workbench', async ({ page }) => {
   await detailRoute(page, state);
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open claim' }).first().click();
-  await page.getByRole('button', { name: 'Coverage', exact: true }).click();
+  await expect(page.getByRole('heading', { name: CLAIM.claimNumber })).toBeVisible();
+  await page.getByRole('button', { name: /CLM-2026-0000001/ }).click();
+  await page.getByRole('tab', { name: 'Coverage', exact: true }).click();
 
   await expect(page.getByTestId('coverage-empty')).toBeVisible();
 
@@ -201,21 +203,64 @@ test('lists injury, exposure, litigation, settlement, recovery, and lien section
   await detailRoute(page, state);
 
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open claim' }).first().click();
+  await expect(page.getByRole('heading', { name: CLAIM.claimNumber })).toBeVisible();
+  await page.getByRole('button', { name: /CLM-2026-0000001/ }).click();
 
-  await expect(page.getByRole('button', { name: 'Injuries & exposures' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Reserve history' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Coverage', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Litigation', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Settlements', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Recovery & liens' })).toBeVisible();
+  for (const label of [
+    'Overview',
+    'Injuries & Exposures',
+    'Reserve History',
+    'Coverage',
+    'Litigation',
+    'Settlements',
+    'Recovery & Liens'
+  ]) {
+    await expect(page.getByRole('tab', { name: label, exact: true })).toBeVisible();
+  }
 
-  await page.getByRole('button', { name: 'Litigation', exact: true }).click();
+  await page.getByRole('tab', { name: 'Litigation', exact: true }).click();
   await expect(page.getByText('No litigation matter.')).toBeVisible();
-  await page.getByRole('button', { name: 'Settlements', exact: true }).click();
+  await page.getByRole('tab', { name: 'Settlements', exact: true }).click();
   await expect(page.getByText('No settlement.')).toBeVisible();
-  await page.getByRole('button', { name: 'Recovery & liens' }).click();
+  await page.getByRole('tab', { name: 'Recovery & Liens', exact: true }).click();
   await expect(page.getByText('No recovery.')).toBeVisible();
   await expect(page.getByText('No lien.')).toBeVisible();
+});
+
+test('closes a claim from the record header and keeps the DIRECT book wall', async ({ page }) => {
+  let claim = { ...CLAIM };
+  let closeBody = null;
+  let closeBook = null;
+
+  await page.route('**/api/v1/claims', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([claim]) });
+  });
+  await page.route('**/api/v1/claims/**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === 'POST' && url.pathname.endsWith('/close')) {
+      closeBody = request.postDataJSON();
+      closeBook = request.headers()['x-eia-book'];
+      claim = { ...claim, status: 'CLOSED', version: 1, currentReserveAmount: '0.0000' };
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(claim)
+      });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+  });
+
+  page.on('dialog', (dialog) => dialog.accept());
+
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: CLAIM.claimNumber })).toBeVisible();
+  await page.getByRole('button', { name: 'Close claim' }).click();
+
+  await expect(page.getByRole('button', { name: 'Closed', exact: true })).toBeVisible();
+  await expect(page.getByRole('status')).toContainText(`${CLAIM.claimNumber} closed`);
+  expect(closeBody.expectedVersion).toBe(0);
+  expect(closeBook).toBe('DIRECT');
 });
 

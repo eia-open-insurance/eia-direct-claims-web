@@ -31,7 +31,9 @@ async function request(path, options = {}) {
 export const api = {
   claims: {
     list: () => request('/api/v1/claims'),
-    create: (body) => request('/api/v1/claims', { method: 'POST', body: JSON.stringify(body) })
+    create: (body) => request('/api/v1/claims', { method: 'POST', body: JSON.stringify(body) }),
+    close: (claimId, body = {}) =>
+      request(`/api/v1/claims/${claimId}/close`, { method: 'POST', body: JSON.stringify(body) })
   },
   injuries: {
     list: (claimId) => request(`/api/v1/claims/${claimId}/injuries`),

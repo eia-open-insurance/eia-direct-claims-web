@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api, REVIEWER_ID, today } from './api.js';
-import { ErrorText, Field, gridStyle, Panel } from './ui.jsx';
+import { ErrorText, Field, Panel } from './ui.jsx';
 
 const EMPTY = {
   position: 'COVERED',
@@ -65,13 +65,13 @@ export default function CoverageTab({ claim }) {
     <>
       <Panel title="Coverage decision">
         {decision ? (
-          <dl style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', gap: 6, margin: 0 }}>
+          <dl className="eia-kv">
             <dt>Position</dt>
             <dd style={{ margin: 0, fontWeight: 700 }} data-testid="coverage-position">
               {decision.position}
             </dd>
             <dt>Status</dt>
-            <dd style={{ margin: 0 }}>{decision.status}</dd>
+            <dd style={{ margin: 0 }}><span className="eia-badge">{decision.status}</span></dd>
             <dt>Basis</dt>
             <dd style={{ margin: 0 }} data-testid="coverage-basis">{decision.basis}</dd>
             <dt>Policy provisions</dt>
@@ -91,7 +91,7 @@ export default function CoverageTab({ claim }) {
       </Panel>
 
       <Panel title="Record a coverage decision">
-        <form onSubmit={submit} style={gridStyle}>
+        <form onSubmit={submit} className="eia-form-grid">
           <Field label="Coverage position">
             <select value={form.position} onChange={update('position')}>
               <option value="COVERED">Covered</option>
@@ -99,7 +99,7 @@ export default function CoverageTab({ claim }) {
               <option value="DEFENSE_ONLY">Defense only</option>
             </select>
           </Field>
-          <Field label="Coverage basis">
+          <Field label="Coverage basis" className="span-2">
             <textarea
               value={form.basis}
               onChange={update('basis')}
@@ -108,7 +108,7 @@ export default function CoverageTab({ claim }) {
               style={{ fontFamily: 'inherit' }}
             />
           </Field>
-          <Field label="Policy provisions">
+          <Field label="Policy provisions" className="span-2">
             <textarea
               value={form.policyProvisions}
               onChange={update('policyProvisions')}

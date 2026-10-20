@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api, money } from './api.js';
-import { DataTable, ErrorText, Field, gridStyle, Panel } from './ui.jsx';
+import { DataTable, ErrorText, Field, Panel } from './ui.jsx';
 
 const EMPTY = {
   component: 'INDEMNITY',
@@ -83,7 +83,7 @@ export default function ReserveTab({ claim, onChanged }) {
       </Panel>
 
       <Panel title="Post a reserve change">
-        <form onSubmit={submit} style={gridStyle}>
+        <form onSubmit={submit} className="eia-form-grid">
           <Field label="Reserve component">
             <select value={form.component} onChange={update('component')}>
               <option value="INDEMNITY">Indemnity</option>

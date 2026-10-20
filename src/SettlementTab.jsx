@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api, money, RELEASE_DOCUMENT_ID, REVIEWER_ID } from './api.js';
-import { DataTable, ErrorText, Field, gridStyle, Panel } from './ui.jsx';
+import { DataTable, ErrorText, Field, Panel } from './ui.jsx';
 
 const EMPTY = {
   amount: '',
@@ -9,7 +9,7 @@ const EMPTY = {
   paymentInstructions: ''
 };
 
-export default function SettlementTab({ claim }) {
+export default function SettlementTab({ claim, onChanged }) {
   const [settlements, setSettlements] = useState([]);
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState('');
@@ -66,6 +66,7 @@ export default function SettlementTab({ claim }) {
         });
       }
       await load();
+      if (onChanged) await onChanged();
     } catch (cause) {
       setError(cause.message);
     } finally {
@@ -90,6 +91,7 @@ export default function SettlementTab({ claim }) {
                 <span style={{ display: 'inline-flex', gap: 6 }}>
                   <button
                     type="button"
+                    className="eia-btn-secondary"
                     disabled={busy || row.status !== 'PROPOSED'}
                     onClick={() => action(row, 'approve')}
                   >
@@ -97,6 +99,7 @@ export default function SettlementTab({ claim }) {
                   </button>
                   <button
                     type="button"
+                    className="eia-btn-secondary"
                     disabled={busy || row.status !== 'AUTHORIZED'}
                     onClick={() => action(row, 'execute')}
                   >
@@ -112,7 +115,7 @@ export default function SettlementTab({ claim }) {
       </Panel>
 
       <Panel title="Propose a settlement">
-        <form onSubmit={submit} style={gridStyle}>
+        <form onSubmit={submit} className="eia-form-grid">
           <Field label="Settlement amount">
             <input
               type="number"

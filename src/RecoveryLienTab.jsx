@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api, money, today } from './api.js';
-import { DataTable, ErrorText, Field, gridStyle, Panel } from './ui.jsx';
+import { DataTable, ErrorText, Field, Panel } from './ui.jsx';
 
 const EMPTY_RECOVERY = {
   recoveryType: 'SUBROGATION',
@@ -20,7 +20,7 @@ const EMPTY_LIEN = {
 
 const TERMINAL = ['RESOLVED', 'WAIVED', 'PAID'];
 
-export default function RecoveryLienTab({ claim }) {
+export default function RecoveryLienTab({ claim, onChanged }) {
   const [recoveries, setRecoveries] = useState([]);
   const [liens, setLiens] = useState([]);
   const [recoveryForm, setRecoveryForm] = useState(EMPTY_RECOVERY);
@@ -60,6 +60,7 @@ export default function RecoveryLienTab({ claim }) {
       });
       setRecoveryForm(EMPTY_RECOVERY);
       await load();
+      if (onChanged) await onChanged();
     } catch (cause) {
       setError(cause.message);
     } finally {
@@ -83,6 +84,7 @@ export default function RecoveryLienTab({ claim }) {
       });
       setLienForm(EMPTY_LIEN);
       await load();
+      if (onChanged) await onChanged();
     } catch (cause) {
       setError(cause.message);
     } finally {
@@ -100,6 +102,7 @@ export default function RecoveryLienTab({ claim }) {
         expectedVersion: lien.version
       });
       await load();
+      if (onChanged) await onChanged();
     } catch (cause) {
       setError(cause.message);
     } finally {
@@ -117,6 +120,7 @@ export default function RecoveryLienTab({ claim }) {
         expectedVersion: recovery.version
       });
       await load();
+      if (onChanged) await onChanged();
     } catch (cause) {
       setError(cause.message);
     } finally {
@@ -140,6 +144,7 @@ export default function RecoveryLienTab({ claim }) {
               render: (row) => (
                 <button
                   type="button"
+                  className="eia-btn-secondary"
                   disabled={busy || row.status === 'RECEIVED'}
                   onClick={() => markReceived(row)}
                 >
@@ -151,7 +156,7 @@ export default function RecoveryLienTab({ claim }) {
           rows={recoveries}
           emptyText="No recovery."
         />
-        <form onSubmit={submitRecovery} style={{ ...gridStyle, marginTop: 16 }}>
+        <form onSubmit={submitRecovery} className="eia-form-grid" style={{ marginTop: 16 }}>
           <Field label="Recovery type">
             <select value={recoveryForm.recoveryType} onChange={update(setRecoveryForm, 'recoveryType')}>
               <option value="SUBROGATION">Subrogation</option>
@@ -219,6 +224,7 @@ export default function RecoveryLienTab({ claim }) {
               render: (row) => (
                 <button
                   type="button"
+                  className="eia-btn-secondary"
                   disabled={busy || TERMINAL.includes(row.status)}
                   onClick={() => resolveLien(row)}
                 >
@@ -230,7 +236,7 @@ export default function RecoveryLienTab({ claim }) {
           rows={liens}
           emptyText="No lien."
         />
-        <form onSubmit={submitLien} style={{ ...gridStyle, marginTop: 16 }}>
+        <form onSubmit={submitLien} className="eia-form-grid" style={{ marginTop: 16 }}>
           <Field label="Lien type">
             <select value={lienForm.lienType} onChange={update(setLienForm, 'lienType')}>
               <option value="MEDICARE">Medicare</option>

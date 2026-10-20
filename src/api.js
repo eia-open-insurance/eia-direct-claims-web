@@ -117,7 +117,16 @@ export const api = {
   },
   policies: {
     /** Policy detail is book-owned, so the DIRECT wall applies. */
-    get: (policyId) => request(`/api/v1/policies/${encodeURIComponent(policyId)}`)
+    get: (policyId) => request(`/api/v1/policies/${encodeURIComponent(policyId)}`),
+    /**
+     * Coverage grants with their limit schedule and current erosion state.
+     * Policy owns the limit ledger, so the read keeps the DIRECT book wall and
+     * the tenant header; `size` is capped at the Policy maximum of 100.
+     */
+    coverages: (policyId, page = 0, size = 100) =>
+      request(
+        `/api/v1/policies/${encodeURIComponent(policyId)}/coverages?page=${page}&size=${size}`
+      )
   },
   parties: {
     /** Party master data is shared across books and is scoped by tenant only. */
@@ -167,9 +176,11 @@ export const api = {
   },
   /**
    * Policy-year and layer allocations. The claim allocates its loss across
-   * policy years; Policy remains the limit authority and the claim reserve is
-   * not changed by an allocation. Percentages travel as fractions (0, 1] and
-   * money as the decimal strings the domain returns.
+   * policy years and optionally names the policy limit it consumes; Policy
+   * remains the limit authority and the claim reserve is not changed by an
+   * allocation. Percentages travel as fractions (0, 1] and money as the
+   * decimal strings the domain returns. The allocation response carries
+   * `limitId`, `erosionStatus`, `erosionMessage`, and `erosionPostedAt`.
    */
   allocations: {
     list: (claimId) => request(`/api/v1/claims/${claimId}/allocations`),
@@ -177,6 +188,15 @@ export const api = {
       request(`/api/v1/claims/${claimId}/allocations`, {
         method: 'POST',
         body: JSON.stringify(body)
+      }),
+    /**
+     * Retries the erosion post for an allocation that Policy did not accept.
+     * The allocation itself is not re-created; Policy applies the fact
+     * idempotently and returns the updated allocation/erosion projection.
+     */
+    retryErosion: (claimId, allocationId) =>
+      request(`/api/v1/claims/${claimId}/allocations/${allocationId}/erosion`, {
+        method: 'POST'
       })
   },
   litigation: {

@@ -75,3 +75,21 @@ The format is based on Keep a Changelog and the project uses Semantic Versioning
   **Reload allocations** on a 409, and contains loading, error, and empty states in the tab.
   The context panel states that allocation distributes the claim loss across policy years and
   layers without changing the reserve or coverage, and that Policy owns the limit ledger.
+- Policy-limit selection and allocation erosion: the **Allocations** tab reads the claim
+  policy's coverage/limit schedule from
+  `GET /api/v1/policies/{policyId}/coverages?page=0&size=100` with the tenant and DIRECT book
+  headers when the tab opens or the claim changes. Each `{coverage, limit, state}` item is
+  flattened to `{limitId, coverageType/code, originalAmount, remainingAmount}` for an optional
+  **Policy limit** select that shows the chosen coverage, original limit, and remaining amount.
+  Selecting a limit adds `limitId` to the allocation create; leaving it empty records the
+  allocation without erosion and explains why. The table adds the policy limit and an erosion
+  badge from the allocation DTO (`NOT_POSTED`, `POSTED`, `FAILED`, plus `erosionMessage` and
+  `erosionPostedAt`). A failed row shows the Policy message and a **Retry erosion** action that
+  calls `POST /api/v1/claims/{claimId}/allocations/{allocationId}/erosion`; the allocation is
+  never removed, a failed retry keeps the row and shows the error, and a posted retry updates
+  the badge and timestamp. The create response's erosion outcome is reported in the status
+  line, the policy-limit read failure is non-blocking with **Retry limits**, and the context
+  panel states that posting erodes the selected limit while Policy owns the limit ledger.
+  Playwright covers the limit fetch/flatten/options, optional `limitId` payload, posted and
+  failed badges, the retry endpoint, no-limit behavior, create-time failure, retry failure, and
+  limit-read failure containment.

@@ -46,12 +46,31 @@ Money is displayed from the decimal strings returned by the domain.
 The **Allocations** tab sits after **Coverage** and reads
 `GET /api/v1/claims/{claimId}/allocations`. Its summary shows the allocated amount, allocated
 percentage, unallocated amount against the current reserve, and the allocation count. The
-table shows policy year, layer, allocation percentage, allocated amount, and a policy link.
-The form is fixed to the claim's policy (policy number and link) and collects a policy year,
-layer (for example `PRIMARY` or `EXCESS_1`), a 0-100 allocation percent, and the allocated
-amount. The percent is sent to `POST /api/v1/claims/{claimId}/allocations` as a fraction, and
-the form prevents the claim's allocation total from exceeding 100%, showing the remaining
-percent as the user types. A successful create refreshes the ledger and the claim record; a
+table shows policy year, layer, allocation percentage, allocated amount, the policy limit, the
+erosion status, and a policy link. The form is fixed to the claim's policy (policy number and
+link) and collects a policy year, layer (for example `PRIMARY` or `EXCESS_1`), a 0-100
+allocation percent, the allocated amount, and an optional **Policy limit**. The percent is sent
+to `POST /api/v1/claims/{claimId}/allocations` as a fraction, and the form prevents the claim's
+allocation total from exceeding 100%, showing the remaining percent as the user types.
+
+Opening the tab (or selecting another claim) also reads the policy's coverage and limit
+schedule from
+`GET /api/v1/policies/{policyId}/coverages?page=0&size=100` with the tenant and DIRECT book
+headers. Each `{coverage, limit, state}` item is flattened into a limit option carrying the
+`limitId`, coverage code/type, original limit amount, and current remaining amount; choosing
+one shows its coverage, limit, and remaining values under the select and adds `limitId` to the
+allocation request. With no limit selected the allocation is still recorded, no policy-limit
+erosion is posted, and the form explains why. A policy-limit read failure is non-blocking: it
+shows **Retry limits** while the allocation form remains usable.
+
+Posting an allocation with a limit sends an erosion fact to Policy, which owns the limit
+ledger. The allocation response carries `limitId`, `erosionStatus`
+(`NOT_POSTED` / `POSTED` / `FAILED`), `erosionMessage`, and `erosionPostedAt`; the new row shows
+those as a **Not posted**, **Posted**, or **Failed** badge. A failed row shows the Policy
+message and a **Retry erosion** action that calls
+`POST /api/v1/claims/{claimId}/allocations/{allocationId}/erosion`; the allocation stays intact
+and retryable, and a retry failure keeps the failed row and displays the error beside it. A
+successful create refreshes the ledger and the claim record and reports the erosion outcome; a
 409 conflict keeps the entered values and offers **Reload allocations**. Loading, error, and
 empty states stay inside the tab. Allocation distributes the claim loss across policy years and
 layers; it does not change the reserve or the coverage position, and Policy owns the limit
@@ -117,8 +136,11 @@ append-only event inbox and that the business claim record remains the source of
 - `npm run build` - production webpack bundle.
 - `npx playwright test` - registration, reserve-history, coverage, allocations (list and
   summary, 0-100 percent sent as a fraction, exactly-100 boundary, remaining-percent hint,
-  over-100 client validation, empty and loading states, 503 containment/retry, and 409
-  conflict reload), settlement-to-payment hand-off, related-payments, assignment (directory
+  over-100 client validation, policy-limit fetch/flatten and options, optional `limitId`
+  payload, posted/failed erosion badges, failed-row message and retry endpoint, no-limit
+  behavior, limit-read failure containment/retry, empty and loading states, 503
+  containment/retry, and 409 conflict reload), settlement-to-payment hand-off,
+  related-payments, assignment (directory
   fetch/cache, person options with role hints, team filtering, displayName/team submission,
   pre-filled and unassigned states, queue filtering, 409 stale reload, and the directory-503
   free-text/static-team fallback), overview payments (source path/query plus tenant and DIRECT

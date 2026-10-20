@@ -4,6 +4,7 @@ const TENANT = '11111111-1111-7111-8111-111111111111';
 const CLAIM_ID = '0192f3a4-2b7e-7d1f-a9c4-3e8b5f0c9d61';
 const POLICY_ID = '22222222-2222-7222-8222-222222222222';
 const PARTY_ID = '33333333-3333-7333-8333-333333333333';
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const CLAIM = {
   id: CLAIM_ID,
@@ -87,7 +88,8 @@ async function fulfillProblem(route, status, detail) {
     contentType: 'application/problem+json',
     body: JSON.stringify({
       type: 'about:blank',
-      title: status === 409 ? 'Conflict' : 'Unprocessable Entity',
+      title:
+        status === 409 ? 'Conflict' : status === 503 ? 'Service Unavailable' : 'Unprocessable Entity',
       status,
       detail
     })
@@ -108,7 +110,11 @@ async function installMocks(page) {
     taskPatchPath: null,
     noteCreateBody: null,
     conflict: false,
-    taskCreateProblem: false
+    taskCreateProblem: false,
+    taskCreateKeys: [],
+    noteCreateKeys: [],
+    taskCreateGate: null,
+    taskCreateFailFirst: false
   };
 
   await page.route('**/api/v1/claims', async (route) => {
@@ -137,7 +143,14 @@ async function installMocks(page) {
     }
 
     if (method === 'POST' && section === 'tasks') {
+      state.taskCreateKeys.push(request.headers()['idempotency-key']);
+      const attempt = state.taskCreateKeys.length;
       state.taskCreateBody = request.postDataJSON();
+      if (state.taskCreateGate) await state.taskCreateGate;
+      if (state.taskCreateFailFirst && attempt === 1) {
+        await fulfillProblem(route, 503, 'The task service is temporarily unavailable.');
+        return;
+      }
       if (state.taskCreateProblem) {
         await fulfillProblem(route, 422, 'Task title is not allowed on a closed claim.');
         return;
@@ -193,6 +206,7 @@ async function installMocks(page) {
     }
 
     if (method === 'POST' && section === 'notes') {
+      state.noteCreateKeys.push(request.headers()['idempotency-key']);
       state.noteCreateBody = request.postDataJSON();
       const created = {
         id: '0192f3a4-2b7e-7d1f-a9c4-3e8b5f0c9d83',
@@ -408,5 +422,93 @@ test('shows problem+json errors for a 409 task conflict and a rejected task', as
   await expect(dialog.getByRole('alert')).toContainText(
     'Task title is not allowed on a closed claim.'
   );
+});
+
+test('sends a valid UUID idempotency key when a diary task is created', async ({ page }) => {
+  const state = await installMocks(page);
+  await openDiaryTab(page);
+
+  await page.getByRole('button', { name: 'Add task', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel('Title').fill('Obtain wage loss records');
+  await dialog.getByLabel('Due date').fill('2026-12-15');
+  await dialog.getByRole('button', { name: 'Add task', exact: true }).click();
+  await expect(dialog).toBeHidden();
+
+  expect(state.taskCreateKeys).toHaveLength(1);
+  expect(state.taskCreateKeys[0]).toMatch(UUID_PATTERN);
+});
+
+test('reuses the task idempotency key when submit is clicked again while the first response is blocked', async ({
+  page
+}) => {
+  const state = await installMocks(page);
+  state.taskCreateFailFirst = true;
+  let releaseFirstResponse;
+  state.taskCreateGate = new Promise((resolve) => {
+    releaseFirstResponse = resolve;
+  });
+
+  await openDiaryTab(page);
+  await page.getByRole('button', { name: 'Add task', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Title').fill('Confirm lien resolution');
+  await dialog.getByLabel('Due date').fill('2026-12-20');
+
+  await dialog.getByRole('button', { name: 'Add task', exact: true }).click();
+  // The first POST is still held by the mock; force a second submit from the
+  // same form, as a double-click or an eager retry would.
+  await dialog.locator('form').evaluate((form) => form.requestSubmit());
+  await expect.poll(() => state.taskCreateKeys.length).toBe(2);
+
+  releaseFirstResponse();
+  await expect(dialog).toBeHidden();
+
+  expect(state.taskCreateKeys[0]).toMatch(UUID_PATTERN);
+  expect(state.taskCreateKeys[1]).toBe(state.taskCreateKeys[0]);
+});
+
+test('uses a new idempotency key for the next task after a successful create', async ({ page }) => {
+  const state = await installMocks(page);
+  await openDiaryTab(page);
+
+  async function addTask(title, dueDate) {
+    await page.getByRole('button', { name: 'Add task', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Title').fill(title);
+    await dialog.getByLabel('Due date').fill(dueDate);
+    await dialog.getByRole('button', { name: 'Add task', exact: true }).click();
+    await expect(dialog).toBeHidden();
+  }
+
+  await addTask('First diary task', '2026-12-15');
+  await addTask('Second diary task', '2026-12-16');
+
+  expect(state.taskCreateKeys).toHaveLength(2);
+  expect(state.taskCreateKeys[0]).toMatch(UUID_PATTERN);
+  expect(state.taskCreateKeys[1]).toMatch(UUID_PATTERN);
+  expect(state.taskCreateKeys[1]).not.toBe(state.taskCreateKeys[0]);
+});
+
+test('sends a separate idempotency key when a note is created', async ({ page }) => {
+  const state = await installMocks(page);
+  await openDiaryTab(page);
+
+  await page.getByRole('button', { name: 'Add task', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Title').fill('Confirm coverage position');
+  await dialog.getByLabel('Due date').fill('2026-12-18');
+  await dialog.getByRole('button', { name: 'Add task', exact: true }).click();
+  await expect(dialog).toBeHidden();
+
+  await page.getByLabel('Author').fill('Dana Handler');
+  await page.getByLabel('Note body').fill('Coverage position confirmed with counsel.');
+  await page.getByRole('button', { name: 'Add note' }).click();
+
+  await expect(page.getByTestId('note-item')).toHaveCount(3);
+  expect(state.noteCreateKeys).toHaveLength(1);
+  expect(state.noteCreateKeys[0]).toMatch(UUID_PATTERN);
+  expect(state.noteCreateKeys[0]).not.toBe(state.taskCreateKeys[0]);
 });
 

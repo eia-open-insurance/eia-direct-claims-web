@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import './ui.css';
 import './ui-overrides.css';
 import { api, BOOK, money } from './api.js';
+import ActivityTab from './ActivityTab.jsx';
 import AssignmentDialog, {
   assignmentFilterValues,
   assignmentText,
@@ -45,7 +46,8 @@ const TABS = [
   { id: 'litigation', label: 'Litigation' },
   { id: 'settlements', label: 'Settlements' },
   { id: 'recovery', label: 'Recovery & Liens' },
-  { id: 'diary', label: 'Diary & Notes' }
+  { id: 'diary', label: 'Diary & Notes' },
+  { id: 'activity', label: 'Activity' }
 ];
 
 const OVERLAY_STYLE = {
@@ -578,6 +580,8 @@ export default function App() {
         return <RecoveryLienTab claim={selectedClaim} onChanged={handleRecordChanged} />;
       case 'diary':
         return <DiaryNotesTab claim={selectedClaim} onChanged={handleRecordChanged} />;
+      case 'activity':
+        return <ActivityTab claim={selectedClaim} />;
       default:
         return <InjuryExposureTab claim={selectedClaim} />;
     }

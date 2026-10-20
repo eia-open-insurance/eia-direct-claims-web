@@ -36,3 +36,11 @@ The format is based on Keep a Changelog and the project uses Semantic Versioning
   The Settlements tab adds a **Related payments** card backed by
   `GET /api/v1/payments/search?q=<claimId>&limit=5`, and the Overview context panel states
   that Payment owns approval and execution.
+- Claim activity timeline: an **Activity** tab after **Diary & Notes** renders
+  `GET /api/v1/events/aggregate/{claimId}?limit=50` scoped by `X-EIA-Tenant`. Rows show the
+  `occurredAt` timestamp, a human-readable event name, inbox status and event version, concise
+  payload facts (status transition, reserve amount, coverage position, settlement amount,
+  task/note, payment source), and the raw event type in mono. The card-local fetch has
+  loading, error, and empty states, refreshes on demand and when the selected claim changes,
+  and never blocks or alters the claim record. Playwright covers the aggregate path/header,
+  newest-first order, empty and 503 states, payload summaries, and claim-change refetch.

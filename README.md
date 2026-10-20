@@ -29,8 +29,9 @@ npm start
 ```
 
 The remote listens on **3004** and proxies `/api` to `http://localhost:8088`. It exposes
-`./App` as the Webpack Module Federation container `eia_direct_claims`. Every API request
-sends `X-EIA-Tenant` and `X-EIA-Book: DIRECT`.
+`./App` as the Webpack Module Federation container `eia_direct_claims`. Claim and policy
+requests send `X-EIA-Tenant` and `X-EIA-Book: DIRECT`; shared or platform reads (parties,
+documents, and the event inbox) are scoped by tenant only.
 
 `npm run build` produces the production bundle. `npm test` runs the Playwright tests against
 a mocked API. `@swc/core` is pinned to exactly `1.10.7`.
@@ -66,13 +67,25 @@ Direct Claims never creates the payment itself; the Payment workbench confirms t
 saves it. The Settlements tab lists related payments via
 `GET /api/v1/payments/search?q=<claimId>&limit=5` and links each one back to `/payment?record=<id>`.
 
+The **Activity** tab sits after **Diary & Notes** and renders the claim's record timeline from the
+platform event inbox (`GET /api/v1/events/aggregate/{claimId}?limit=50`, scoped by
+`X-EIA-Tenant`). Rows show the `occurredAt` timestamp, a human-readable event name, the inbox
+status and event version, concise payload facts (status transition, reserve amount, coverage
+position, settlement amount, task/note, payment source), and the raw event type in mono. The card
+fetches independently of the claim record with its own loading, error, and empty states; it
+refreshes on demand and when the selected claim changes, so an unavailable inbox never blocks or
+changes the claim. The context note states that the timeline is a read-only projection of the
+append-only event inbox and that the business claim record remains the source of truth.
+
 ## Verification
 
 - `npm run build` - production webpack bundle.
 - `npx playwright test` - registration, reserve-history, coverage, settlement-to-payment
   hand-off, related-payments, assignment (payload/version, header/summary/queue refresh,
-  unassigned and pre-filled states, queue filtering, and 409 stale reload), and tab-set flows
-  with a mocked API; every request asserts the DIRECT book header.
+  unassigned and pre-filled states, queue filtering, and 409 stale reload), activity (aggregate
+  path/tenant header, newest-first timeline, empty and 503 states, payload summaries, and
+  claim-change refetch), and tab-set flows with a mocked API; every domain request asserts the
+  DIRECT book header.
 
 ## Notes
 

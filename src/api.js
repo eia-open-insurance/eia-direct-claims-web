@@ -222,6 +222,17 @@ export const api = {
   notes: {
     list: (claimId) => request(`/api/v1/claims/${claimId}/notes`),
     create: (claimId, body, key) => createNote(claimId, body, key)
+  },
+  events: {
+    /**
+     * Activity events for one claim aggregate, newest first as published by the
+     * platform event inbox. The inbox is tenant-scoped, not book-scoped, so the
+     * DIRECT wall is not sent on this platform read.
+     */
+    aggregate: (claimId, limit = 50) =>
+      request(`/api/v1/events/aggregate/${encodeURIComponent(claimId)}?limit=${limit}`, {
+        book: null
+      })
   }
 };
 

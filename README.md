@@ -78,6 +78,16 @@ Direct Claims never creates the payment itself; the Payment workbench confirms t
 saves it. The Settlements tab lists related payments via
 `GET /api/v1/payments/search?q=<claimId>&limit=5` and links each one back to `/payment?record=<id>`.
 
+The **Overview** adds a **Payments** card after **Documents**. It reads the claim-scoped
+`GET /api/v1/payments?sourceType=DIRECT_CLAIM&sourceId=<claimId>` with `X-EIA-Tenant` and
+`X-EIA-Book: DIRECT` (the same book wall the workbench's other Payment calls send) and accepts
+either a bare array or an `{items:[...]}` envelope. Each row shows the payment number linked to
+`/payment?record=<id>`, status, amount and currency, payee (`payeeName`, falling back to
+`payeePartyId`), and created date, with a summary of total paid per currency and the pending
+count. The lookup is card-local: loading, failure, and empty states never block or alter the
+claim. The empty state explains the settlement hand-off, and the context note states that
+Payment owns approval and execution while the claim keeps the settlement and paid-loss record.
+
 The **Activity** tab sits after **Diary & Notes** and renders the claim's record timeline from the
 platform event inbox (`GET /api/v1/events/aggregate/{claimId}?limit=50`, scoped by
 `X-EIA-Tenant`). Rows show the `occurredAt` timestamp, a human-readable event name, the inbox
@@ -95,9 +105,12 @@ append-only event inbox and that the business claim record remains the source of
   hand-off, related-payments, assignment (directory fetch/cache, person options with role
   hints, team filtering, displayName/team submission, pre-filled and unassigned states,
   queue filtering, 409 stale reload, and the directory-503 free-text/static-team fallback),
-  activity (aggregate path/tenant header, newest-first timeline, empty and 503 states,
-  payload summaries, and claim-change refetch), and tab-set flows with a mocked API; every
-  domain request asserts the DIRECT book header.
+  overview payments (source path/query plus tenant and DIRECT book headers, array and
+  `{items}` payloads, rows/link/payee/created date, paid-and-pending summary, empty hand-off
+  context, 503 containment, non-blocking loading, and claim-change refetch), activity
+  (aggregate path/tenant header, newest-first timeline, empty and 503 states, payload
+  summaries, and claim-change refetch), and tab-set flows with a mocked API; every domain
+  request asserts the DIRECT book header.
 
 ## Notes
 

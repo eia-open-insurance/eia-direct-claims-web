@@ -190,8 +190,9 @@ test('the Overview context panel states the settlement-to-Payment boundary', asy
   await page.goto('/');
   await expect(page.getByRole('heading', { name: CLAIM.claimNumber })).toBeVisible();
 
-  await expect(page.getByText(/handed to Payment from the Settlements tab/i)).toBeVisible();
-  await expect(page.getByText(/Payment owns payment approval and execution/i)).toBeVisible();
+  const contextPanel = page.getByRole('region', { name: 'Why this matters' });
+  await expect(contextPanel.getByText(/handed to Payment from the Settlements tab/i)).toBeVisible();
+  await expect(contextPanel.getByText(/Payment owns payment approval and execution/i)).toBeVisible();
 });
 
 test('an authorized settlement offers Create payment with the full hand-off URL', async ({ page }) => {
@@ -309,7 +310,12 @@ test('related payments request the claim query and link each payment record', as
   await expect(card.getByText('USD 300,000.00')).toBeVisible();
   await expect(card.getByText('EUR 25,000.50')).toBeVisible();
 
-  expect(state.paymentRequests).toEqual([
+  // The Overview's claim payments card also reads Payment; assert the
+  // Settlements tab's related-payments query in isolation.
+  const searchRequests = state.paymentRequests.filter(
+    (entry) => entry.path === '/api/v1/payments/search'
+  );
+  expect(searchRequests).toEqual([
     {
       method: 'GET',
       path: '/api/v1/payments/search',

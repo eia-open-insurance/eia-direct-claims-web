@@ -54,3 +54,13 @@ The format is based on Keep a Changelog and the project uses Semantic Versioning
   loading, error, and empty states, refreshes on demand and when the selected claim changes,
   and never blocks or alters the claim record. Playwright covers the aggregate path/header,
   newest-first order, empty and 503 states, payload summaries, and claim-change refetch.
+- Claim payments card: the Overview renders a **Payments** card after **Documents** backed by
+  `GET /api/v1/payments?sourceType=DIRECT_CLAIM&sourceId=<claimId>` with the tenant and DIRECT
+  book headers. Rows show the payment number linked to `/payment?record=<id>`, status, amount
+  and currency, payee (`payeeName` or `payeePartyId`), and created date; the summary totals
+  paid amounts per currency and counts pending payments. The fetch is card-local with loading,
+  error, and empty states that never block the claim, the empty state explains the settlement
+  hand-off, and the context note states that Payment owns approval/execution while the claim
+  holds the settlement and paid-loss record. Playwright covers the request path/query/headers,
+  array and `{items}` payloads, rows and links, empty state, 503 containment, non-blocking
+  loading, and claim-change refetch.

@@ -3,6 +3,7 @@ import { api, BOOK, money } from './api.js';
 import { assignmentText } from './ClaimAssignment.jsx';
 import DocumentsCard from './DocumentsCard.jsx';
 import { navigate, recordHref } from './navigation.js';
+import PaymentsCard from './PaymentsCard.jsx';
 import { RelatedLabel } from './related.jsx';
 import { humanize, shortId, statusTone } from './ui.jsx';
 
@@ -237,6 +238,8 @@ export default function OverviewTab({ claim, related, onNavigate }) {
       <RelatedRecords key={claim.policyId || 'no-policy'} claim={claim} policy={policyEntry} />
 
       <DocumentsCard key={claim.id} claimId={claim.id} />
+
+      <PaymentsCard key={claim.id} claim={claim} />
 
       <section className="eia-card" aria-label="Book wall" style={{ marginTop: 14 }}>
         <h3>DIRECT book wall</h3>

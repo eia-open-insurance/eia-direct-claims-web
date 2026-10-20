@@ -196,6 +196,17 @@ export const api = {
     // hand-off carry sourceId=claimId, so the same query returns them.
     search: (query, limit = 5) =>
       request(`/api/v1/payments/search?q=${encodeURIComponent(query || '')}&limit=${limit}`),
+    /**
+     * Payments linked to one business source. Payment reads are tenant-scoped
+     * but operational, so the app's payment calls keep the DIRECT book wall
+     * (the same headers its search and detail reads send).
+     */
+    listBySource: (sourceType, sourceId) =>
+      request(
+        `/api/v1/payments?sourceType=${encodeURIComponent(sourceType)}&sourceId=${encodeURIComponent(
+          sourceId
+        )}`
+      ),
     get: (paymentId) => request(`/api/v1/payments/${paymentId}`)
   },
   recoveries: {

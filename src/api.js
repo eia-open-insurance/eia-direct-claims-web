@@ -18,6 +18,7 @@ async function request(path, options = {}) {
   const { book = BOOK, ...init } = options;
   const response = await fetch(path, {
     ...init,
+    cache: init.cache || 'no-store',
     headers: {
       'X-EIA-Tenant': TENANT,
       ...(book ? { 'X-EIA-Book': book } : {}),

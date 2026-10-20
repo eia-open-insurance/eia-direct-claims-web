@@ -1,5 +1,6 @@
-import React from 'react';
-import { BOOK, money } from './api.js';
+import React, { useEffect, useState } from 'react';
+import { api, BOOK, money } from './api.js';
+import { navigate, recordHref } from './navigation.js';
 import { humanize, shortId, statusTone } from './ui.jsx';
 
 const ACTIONS = [
@@ -11,8 +12,95 @@ const ACTIONS = [
   ['recovery', 'Record a recovery or lien']
 ];
 
+function openRecord(event) {
+  event.preventDefault();
+  navigate(event.currentTarget.getAttribute('href'));
+}
+
+function RelatedRecords({ claim }) {
+  const [cessions, setCessions] = useState([]);
+  const [state, setState] = useState(claim.policyId ? 'loading' : 'empty');
+  const policyHref = claim.policyId ? recordHref('policy', claim.policyId) : '';
+
+  useEffect(() => {
+    if (!claim.policyId) {
+      setCessions([]);
+      setState('empty');
+      return undefined;
+    }
+    let alive = true;
+    setState('loading');
+    api.cessions
+      .search(claim.policyId, 5)
+      .then((body) => {
+        if (!alive) return;
+        const items = Array.isArray(body) ? body : Array.isArray(body?.items) ? body.items : [];
+        setCessions(items);
+        setState('ready');
+      })
+      .catch(() => {
+        if (!alive) return;
+        setCessions([]);
+        setState('error');
+      });
+    return () => {
+      alive = false;
+    };
+  }, [claim.policyId]);
+
+  return (
+    <section className="eia-card" aria-label="Related records" style={{ marginTop: 14 }}>
+      <h3>Related records</h3>
+      <p style={{ margin: '0 0 4px' }}>
+        Records generated from the policy behind this claim. Cessions are looked up by policy id on the DIRECT
+        book.
+      </p>
+      <div className="eia-related-list" data-testid="related-records">
+        {claim.policyId && (
+          <a
+            className="eia-related-record"
+            href={policyHref}
+            onClick={openRecord}
+            data-testid="related-policy-link"
+          >
+            <b>POLICY</b>
+            <span>{shortId(claim.policyId)}</span>
+          </a>
+        )}
+        {cessions.map((cession) => {
+          const href = cession.href || recordHref('cession', cession.id);
+          return (
+            <a
+              key={cession.id || href}
+              className="eia-related-record"
+              href={href}
+              onClick={openRecord}
+              data-testid="related-cession-link"
+            >
+              <b>{cession.label}</b>
+              <span>{cession.secondary}</span>
+            </a>
+          );
+        })}
+      </div>
+      {state === 'loading' && <p className="eia-muted" style={{ margin: '8px 0 0' }}>Loading related cessions…</p>}
+      {state === 'empty' && (
+        <p className="eia-muted" style={{ margin: '8px 0 0' }}>Policy context is not available for this claim.</p>
+      )}
+      {state === 'ready' && cessions.length === 0 && (
+        <p className="eia-muted" style={{ margin: '8px 0 0' }}>No cessions recorded for this policy.</p>
+      )}
+      {state === 'error' && (
+        <p className="eia-muted" style={{ margin: '8px 0 0' }}>Related cessions could not be loaded.</p>
+      )}
+    </section>
+  );
+}
+
 export default function OverviewTab({ claim, onNavigate }) {
   const currency = claim.reserveCurrency || 'USD';
+  const policyHref = claim.policyId ? recordHref('policy', claim.policyId) : '';
+  const claimantHref = claim.claimantPartyId ? recordHref('party', claim.claimantPartyId) : '';
 
   return (
     <>
@@ -27,9 +115,27 @@ export default function OverviewTab({ claim, onNavigate }) {
             <dt>Book</dt>
             <dd><span className="eia-badge direct">{BOOK}</span></dd>
             <dt>Policy</dt>
-            <dd className="eia-mono">{claim.policyId || '—'}</dd>
+            <dd>
+              {claim.policyId ? (
+                <>
+                  <a href={policyHref} onClick={openRecord} data-testid="overview-policy-link">
+                    Open policy record
+                  </a>
+                  <span className="eia-mono" style={{ marginLeft: 6 }}>{shortId(claim.policyId)}</span>
+                </>
+              ) : '—'}
+            </dd>
             <dt>Claimant party</dt>
-            <dd className="eia-mono">{claim.claimantPartyId || '—'}</dd>
+            <dd>
+              {claim.claimantPartyId ? (
+                <>
+                  <a href={claimantHref} onClick={openRecord} data-testid="overview-claimant-link">
+                    Open claimant party record
+                  </a>
+                  <span className="eia-mono" style={{ marginLeft: 6 }}>{shortId(claim.claimantPartyId)}</span>
+                </>
+              ) : '—'}
+            </dd>
             <dt>Claim type</dt>
             <dd>{humanize(claim.claimType)}</dd>
             <dt>Cause code</dt>
@@ -69,6 +175,26 @@ export default function OverviewTab({ claim, onNavigate }) {
           </div>
         </section>
       </div>
+
+      <section className="eia-context-panel" aria-label="Why this matters">
+        <h4>Why this matters</h4>
+        <p>
+          The policy controls coverage for this claim: its terms, limits, and conditions decide whether and how
+          the loss responds. Cessions and reinsurance recoveries are derived from the policy, not created on the
+          claim. Reserves and settlements recorded here drive payment instructions and the financial events that
+          post downstream.
+        </p>
+        <div className="links">
+          {claim.policyId && (
+            <a href={policyHref} onClick={openRecord} data-testid="why-policy-link">Policy record</a>
+          )}
+          {claim.claimantPartyId && (
+            <a href={claimantHref} onClick={openRecord} data-testid="why-claimant-link">Claimant record</a>
+          )}
+        </div>
+      </section>
+
+      <RelatedRecords key={claim.policyId || 'no-policy'} claim={claim} />
 
       <section className="eia-card" aria-label="Book wall" style={{ marginTop: 14 }}>
         <h3>DIRECT book wall</h3>

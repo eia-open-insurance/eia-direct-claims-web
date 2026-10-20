@@ -31,9 +31,16 @@ async function request(path, options = {}) {
 export const api = {
   claims: {
     list: () => request('/api/v1/claims'),
+    get: (claimId) => request(`/api/v1/claims/${claimId}`),
+    search: (query, limit = 10) =>
+      request(`/api/v1/claims/search?q=${encodeURIComponent(query || '')}&limit=${limit}`),
     create: (body) => request('/api/v1/claims', { method: 'POST', body: JSON.stringify(body) }),
     close: (claimId, body = {}) =>
       request(`/api/v1/claims/${claimId}/close`, { method: 'POST', body: JSON.stringify(body) })
+  },
+  cessions: {
+    search: (query, limit = 5) =>
+      request(`/api/v1/cessions/search?q=${encodeURIComponent(query || '')}&limit=${limit}`)
   },
   injuries: {
     list: (claimId) => request(`/api/v1/claims/${claimId}/injuries`),

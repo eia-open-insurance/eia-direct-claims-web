@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import './ui.css';
 import { api, BOOK, money } from './api.js';
+import EntityPicker from './EntityPicker.jsx';
 import CoverageTab from './CoverageTab.jsx';
 import InjuryExposureTab from './InjuryExposureTab.jsx';
 import LitigationTab from './LitigationTab.jsx';
+import { navigate } from './navigation.js';
 import OverviewTab from './OverviewTab.jsx';
 import RecoveryLienTab from './RecoveryLienTab.jsx';
 import ReserveTab from './ReserveTab.jsx';
@@ -12,7 +14,11 @@ import { ErrorText, Field, humanize, shortId, statusTone } from './ui.jsx';
 
 const EMPTY_FORM = {
   policyId: '',
+  policyLabel: '',
+  policySecondary: '',
   claimantPartyId: '',
+  claimantLabel: '',
+  claimantSecondary: '',
   lossDate: '',
   reportDate: '',
   causeCode: '',
@@ -49,11 +55,56 @@ const DIALOG_STYLE = {
   boxShadow: '0 24px 70px rgba(11, 46, 79, 0.28)'
 };
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function sumBy(rows, statuses) {
   if (!Array.isArray(rows)) return null;
   return rows
     .filter((row) => statuses.includes(row.status))
     .reduce((total, row) => total + (Number(row.amount) || 0), 0);
+}
+
+function readUrlState() {
+  if (typeof window === 'undefined') return { record: '', create: false };
+  const params = new URLSearchParams(window.location.search);
+  return { record: params.get('record') || '', create: params.get('new') === '1' };
+}
+
+/**
+ * The remote is mounted either at the shell route (/direct-claims) or directly
+ * at the dev-server root (/). Only treat the URL as claims state on those routes
+ * so a cross-link to /policy or /party does not get interpreted as a claim id.
+ */
+function onClaimsRoute() {
+  if (typeof window === 'undefined') return false;
+  const path = window.location.pathname.replace(/\/+$/, '');
+  return path === '' || path === '/' || path.endsWith('/direct-claims');
+}
+
+function writeUrl({ record = '', create = false, replace = false } = {}) {
+  if (typeof window === 'undefined' || !onClaimsRoute()) return;
+  const params = new URLSearchParams();
+  if (record) params.set('record', record);
+  if (create) params.set('new', '1');
+  const query = params.toString();
+  const target = `${window.location.pathname}${query ? `?${query}` : ''}`;
+  const current = `${window.location.pathname}${window.location.search}`;
+  if (target === current) return;
+  try {
+    if (replace) window.history.replaceState({}, '', target);
+    else window.history.pushState({}, '', target);
+  } catch {
+    // URL state is an enhancement; queue selection still works without it.
+  }
+}
+
+function filterClaims(claims, filter) {
+  const term = filter.trim().toLowerCase();
+  if (!term) return claims;
+  return claims.filter((claim) =>
+    [claim.claimNumber, claim.claimType, humanize(claim.claimType), claim.causeCode, claim.status]
+      .some((value) => String(value || '').toLowerCase().includes(term))
+  );
 }
 
 export default function App() {
@@ -69,10 +120,20 @@ export default function App() {
   const [closing, setClosing] = useState(false);
   const [summary, setSummary] = useState({ paidLoss: null, recoveries: null });
   const [summaryNonce, setSummaryNonce] = useState(0);
+  const [queueFilter, setQueueFilter] = useState('');
+
+  const claimsRef = useRef([]);
+  const applyingUrlRef = useRef(false);
+  const registerOpenRef = useRef(false);
 
   const selectedClaim = claims.find((claim) => claim.id === selectedId) || null;
   const selectedClaimId = selectedClaim?.id || null;
   const currency = selectedClaim?.reserveCurrency || 'USD';
+  const filteredClaims = filterClaims(claims, queueFilter);
+
+  useEffect(() => {
+    registerOpenRef.current = registerOpen;
+  }, [registerOpen]);
 
   async function load() {
     const rows = await api.claims.list();
@@ -80,15 +141,102 @@ export default function App() {
     return Array.isArray(rows) ? rows : [];
   }
 
+  /**
+   * Applies ?record= and ?new=1. The record is selected immediately when it is
+   * already in the queue; otherwise the detail endpoint is fetched and the claim
+   * is inserted at the top of the queue.
+   */
+  async function applyUrlState(rows, { initial = false } = {}) {
+    if (!onClaimsRoute()) return;
+    const { record, create } = readUrlState();
+
+    if (create) {
+      if (!registerOpenRef.current) setForm(EMPTY_FORM);
+      setRegisterOpen(true);
+      setError('');
+      return;
+    }
+
+    if (!record) {
+      if (!initial) {
+        setRegisterOpen(false);
+        setError('');
+      }
+      return;
+    }
+
+    setRegisterOpen(false);
+    if (applyingUrlRef.current) return;
+
+    const queue = Array.isArray(rows) && rows.length > 0 ? rows : claimsRef.current;
+    const known = queue.find((claim) => claim.id === record || claim.claimNumber === record);
+    if (known) {
+      setSelectedId(known.id);
+      setError('');
+      return;
+    }
+
+    if (!UUID_PATTERN.test(record)) {
+      setError(`Claim “${record}” was not found in the DIRECT claim queue.`);
+      return;
+    }
+
+    applyingUrlRef.current = true;
+    try {
+      const claim = await api.claims.get(record);
+      if (claim?.id) {
+        setClaims((current) => (current.some((row) => row.id === claim.id) ? current : [claim, ...current]));
+        setSelectedId(claim.id);
+        setActiveTab('overview');
+        setError('');
+      }
+    } catch (cause) {
+      setError(`Claim ${record} could not be loaded: ${cause.message}`);
+      setSelectedId((current) => current || claimsRef.current[0]?.id || null);
+    } finally {
+      applyingUrlRef.current = false;
+    }
+  }
+
   useEffect(() => {
+    let alive = true;
+    if (readUrlState().create && onClaimsRoute()) {
+      setForm(EMPTY_FORM);
+      setRegisterOpen(true);
+    }
+
+    const onPopState = () => {
+      applyUrlState(claimsRef.current);
+    };
+    window.addEventListener('popstate', onPopState);
+
     load()
-      .catch((cause) => setError(cause.message))
-      .finally(() => setLoading(false));
+      .then((rows) => {
+        if (!alive) return;
+        setLoading(false);
+        applyUrlState(rows, { initial: true });
+      })
+      .catch((cause) => {
+        if (!alive) return;
+        setLoading(false);
+        setError(cause.message);
+      });
+
+    return () => {
+      alive = false;
+      window.removeEventListener('popstate', onPopState);
+    };
   }, []);
 
   useEffect(() => {
+    claimsRef.current = claims;
     setSelectedId((current) => {
       if (current && claims.some((claim) => claim.id === current)) return current;
+      const requested = readUrlState().record;
+      if (requested && !claims.some((claim) => claim.id === requested || claim.claimNumber === requested)) {
+        // Keep waiting for the detail lookup instead of selecting a different claim.
+        return current;
+      }
       return claims[0]?.id || null;
     });
   }, [claims]);
@@ -125,11 +273,12 @@ export default function App() {
       if (event.key === 'Escape' && !registerBusy) {
         setRegisterOpen(false);
         setError('');
+        writeUrl({ record: selectedId || '' });
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [registerOpen, registerBusy]);
+  }, [registerOpen, registerBusy, selectedId]);
 
   function refreshSummary() {
     setSummaryNonce((value) => value + 1);
@@ -137,6 +286,24 @@ export default function App() {
 
   function update(field) {
     return (event) => setForm((current) => ({ ...current, [field]: event.target.value }));
+  }
+
+  function selectPolicy(id, item) {
+    setForm((current) => ({
+      ...current,
+      policyId: id,
+      policyLabel: item?.label || '',
+      policySecondary: item?.secondary || ''
+    }));
+  }
+
+  function selectClaimantParty(id, item) {
+    setForm((current) => ({
+      ...current,
+      claimantPartyId: id,
+      claimantLabel: item?.label || '',
+      claimantSecondary: item?.secondary || ''
+    }));
   }
 
   async function refresh() {
@@ -163,24 +330,33 @@ export default function App() {
     setSelectedId(claim.id);
     setError('');
     setNotice('');
+    writeUrl({ record: claim.id });
   }
 
   function openRegister() {
     setForm(EMPTY_FORM);
     setError('');
+    setNotice('');
     setRegisterOpen(true);
+    writeUrl({ create: true });
   }
 
   function closeRegister() {
     if (registerBusy) return;
     setRegisterOpen(false);
     setError('');
+    writeUrl({ record: selectedId || '' });
   }
 
   async function submit(event) {
     event.preventDefault();
-    setRegisterBusy(true);
     setError('');
+    if (!form.policyId || !form.claimantPartyId) {
+      setError('Select a policy and a claimant party before registering the claim.');
+      return;
+    }
+
+    setRegisterBusy(true);
     try {
       const payload = {
         policyId: form.policyId,
@@ -200,7 +376,10 @@ export default function App() {
       setForm(EMPTY_FORM);
       setRegisterOpen(false);
       await load();
-      if (created?.id) setSelectedId(created.id);
+      if (created?.id) {
+        setSelectedId(created.id);
+        writeUrl({ record: created.id });
+      }
       setActiveTab('overview');
       setNotice(
         created?.claimNumber
@@ -279,32 +458,67 @@ export default function App() {
       {error && !registerOpen && <p role="alert" style={{ margin: '0 0 12px' }}>{error}</p>}
 
       <div className="eia-record-layout">
-        <aside className="eia-record-list" aria-label="Direct claim queue">
-          <div className="eia-record-list-head">
-            <strong>Claim queue</strong>
-            <span className="eia-muted">{loading ? '…' : claims.length}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+          <div
+            className="eia-queue-search"
+            role="search"
+            aria-label="Filter the claim queue"
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <div className="eia-search-box" style={{ height: 38, flex: 1 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+                <path d="m20 20-3.4-3.4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+              <input
+                type="search"
+                value={queueFilter}
+                onChange={(event) => setQueueFilter(event.target.value)}
+                placeholder="Filter claims by number, type, cause, or status…"
+                aria-label="Filter claims by number, type, cause, or status"
+                autoComplete="off"
+                data-testid="claim-filter"
+              />
+            </div>
+            {queueFilter && (
+              <button type="button" className="eia-btn-ghost" onClick={() => setQueueFilter('')}>
+                Clear
+              </button>
+            )}
           </div>
-          {claims.map((claim) => (
-            <button
-              key={claim.id}
-              type="button"
-              className={claim.id === selectedId ? 'selected' : ''}
-              aria-current={claim.id === selectedId ? 'true' : undefined}
-              onClick={() => selectClaim(claim)}
-            >
-              <span className="record-primary">{claim.claimNumber}</span>
-              <span className="record-secondary">Claimant {shortId(claim.claimantPartyId)}</span>
-              <span className="record-secondary" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span className={`eia-pill ${statusTone(claim.status)}`}>{claim.status}</span>
-                <span>Loss {claim.lossDate || '—'}</span>
+
+          <aside className="eia-record-list" aria-label="Direct claim queue">
+            <div className="eia-record-list-head">
+              <strong>Claim queue</strong>
+              <span className="eia-muted" data-testid="claim-queue-count">
+                {loading ? '…' : queueFilter ? `${filteredClaims.length} of ${claims.length}` : claims.length}
               </span>
-            </button>
-          ))}
-          {!loading && claims.length === 0 && (
-            <div className="empty">No DIRECT claims registered yet.</div>
-          )}
-          {loading && <div className="empty">Loading DIRECT claims…</div>}
-        </aside>
+            </div>
+            {filteredClaims.map((claim) => (
+              <button
+                key={claim.id}
+                type="button"
+                className={claim.id === selectedId ? 'selected' : ''}
+                aria-current={claim.id === selectedId ? 'true' : undefined}
+                onClick={() => selectClaim(claim)}
+              >
+                <span className="record-primary">{claim.claimNumber}</span>
+                <span className="record-secondary">Claimant {shortId(claim.claimantPartyId)}</span>
+                <span className="record-secondary" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span className={`eia-pill ${statusTone(claim.status)}`}>{claim.status}</span>
+                  <span>Loss {claim.lossDate || '—'}</span>
+                </span>
+              </button>
+            ))}
+            {!loading && claims.length > 0 && filteredClaims.length === 0 && (
+              <div className="empty">No claims match “{queueFilter.trim()}”. Clear the filter to see the full queue.</div>
+            )}
+            {!loading && claims.length === 0 && (
+              <div className="empty">No DIRECT claims registered yet.</div>
+            )}
+            {loading && <div className="empty">Loading DIRECT claims…</div>}
+          </aside>
+        </div>
 
         <section className="eia-record-panel" aria-label="Claim record">
           {selectedClaim ? (
@@ -441,24 +655,54 @@ export default function App() {
             </div>
 
             <form className="eia-form-grid" onSubmit={submit} style={{ marginTop: 16 }}>
-              <Field label="Policy ID">
-                <input
-                  id="policyId"
+              <Field label="Policy">
+                <EntityPicker
+                  endpoint="/api/v1/policies/search"
+                  book={BOOK}
                   value={form.policyId}
-                  onChange={update('policyId')}
-                  placeholder="Policy UUID"
-                  required
-                  autoFocus
+                  valueLabel={form.policyLabel}
+                  onChange={selectPolicy}
+                  placeholder="Search policy number or product…"
+                  disabled={registerBusy}
                 />
+                {form.policyId && (
+                  <span className="eia-picker-hint">
+                    {form.policySecondary || 'Policy selected'} ·{' '}
+                    <a
+                      href={`/policy?record=${form.policyId}`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        navigate(event.currentTarget.getAttribute('href'));
+                      }}
+                    >
+                      Open policy record
+                    </a>
+                  </span>
+                )}
               </Field>
-              <Field label="Claimant party ID">
-                <input
-                  id="claimantPartyId"
+              <Field label="Claimant party">
+                <EntityPicker
+                  endpoint="/api/v1/parties/search"
                   value={form.claimantPartyId}
-                  onChange={update('claimantPartyId')}
-                  placeholder="Party UUID"
-                  required
+                  valueLabel={form.claimantLabel}
+                  onChange={selectClaimantParty}
+                  placeholder="Search party number or name…"
+                  disabled={registerBusy}
                 />
+                {form.claimantPartyId && (
+                  <span className="eia-picker-hint">
+                    {form.claimantSecondary || 'Party selected'} ·{' '}
+                    <a
+                      href={`/party?record=${form.claimantPartyId}`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        navigate(event.currentTarget.getAttribute('href'));
+                      }}
+                    >
+                      Open claimant party record
+                    </a>
+                  </span>
+                )}
               </Field>
               <Field label="Loss date">
                 <input id="lossDate" type="date" value={form.lossDate} onChange={update('lossDate')} required />

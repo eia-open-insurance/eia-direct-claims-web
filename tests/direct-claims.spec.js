@@ -60,6 +60,48 @@ test('renders the Direct Claims workbench, sends the DIRECT book header, and reg
     await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
   });
 
+  await page.route('**/api/v1/policies/search**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        query: 'POL',
+        limit: 8,
+        items: [
+          {
+            id: '22222222-2222-7222-8222-222222222222',
+            type: 'POLICY',
+            label: 'POL-2026-0001',
+            secondary: 'GL · ACTIVE',
+            status: 'ACTIVE',
+            href: '/policy?record=22222222-2222-7222-8222-222222222222'
+          }
+        ]
+      })
+    });
+  });
+
+  await page.route('**/api/v1/parties/search**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        query: 'PTY',
+        limit: 8,
+        items: [
+          {
+            id: '33333333-3333-7333-8333-333333333333',
+            type: 'PARTY',
+            label: 'PTY-2026-0001',
+            secondary: 'Meridian Manufacturing · ORGANIZATION',
+            status: 'ACTIVE',
+            href: '/party?record=33333333-3333-7333-8333-333333333333'
+          }
+        ]
+      })
+    });
+  });
+
   await page.goto('/');
 
   await expect(page.getByRole('heading', { name: 'Direct claims' })).toBeVisible();
@@ -72,8 +114,18 @@ test('renders the Direct Claims workbench, sends the DIRECT book header, and reg
   await page.getByRole('button', { name: 'Register claim' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  await dialog.getByLabel('Policy ID').fill('22222222-2222-7222-8222-222222222222');
-  await dialog.getByLabel('Claimant party ID').fill('33333333-3333-7333-8333-333333333333');
+  await dialog.getByPlaceholder('Search policy number or product…').fill('POL-2026');
+  await dialog.getByRole('button', { name: /POL-2026-0001/ }).click();
+  await dialog.getByPlaceholder('Search party number or name…').fill('PTY-2026');
+  await dialog.getByRole('button', { name: /PTY-2026-0001/ }).click();
+  await expect(dialog.getByRole('link', { name: 'Open policy record' })).toHaveAttribute(
+    'href',
+    '/policy?record=22222222-2222-7222-8222-222222222222'
+  );
+  await expect(dialog.getByRole('link', { name: 'Open claimant party record' })).toHaveAttribute(
+    'href',
+    '/party?record=33333333-3333-7333-8333-333333333333'
+  );
   await dialog.getByLabel('Loss date').fill('2026-04-01');
   await dialog.getByLabel('Report date').fill('2026-04-02');
   await dialog.getByLabel('Cause code').fill('GL');

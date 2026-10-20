@@ -120,6 +120,21 @@ export const api = {
     search: (query, limit = 5) =>
       request(`/api/v1/cessions/search?q=${encodeURIComponent(query || '')}&limit=${limit}`)
   },
+  documents: {
+    /**
+     * Documents linked to one claim. The link type identifies the claim book;
+     * the claim id is the business record the document association points at.
+     * The document service scopes by tenant, so the DIRECT book wall is not
+     * required for this lookup.
+     */
+    listLinked: (linkedType, linkedId) =>
+      request(
+        `/api/v1/documents?linkedType=${encodeURIComponent(linkedType)}&linkedId=${encodeURIComponent(
+          linkedId
+        )}`,
+        { book: null }
+      )
+  },
   injuries: {
     list: (claimId) => request(`/api/v1/claims/${claimId}/injuries`),
     create: (claimId, body) =>

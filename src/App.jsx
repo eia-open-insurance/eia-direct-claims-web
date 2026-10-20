@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './ui.css';
+import './ui-overrides.css';
 import { api, BOOK, money } from './api.js';
+import ClaimProgress, { EMPTY_PROCESS } from './ClaimProgress.jsx';
 import EntityPicker from './EntityPicker.jsx';
 import CoverageTab from './CoverageTab.jsx';
 import InjuryExposureTab from './InjuryExposureTab.jsx';
@@ -125,6 +127,7 @@ export default function App() {
   const [registerBusy, setRegisterBusy] = useState(false);
   const [closing, setClosing] = useState(false);
   const [summary, setSummary] = useState({ paidLoss: null, recoveries: null });
+  const [processData, setProcessData] = useState(EMPTY_PROCESS);
   const [summaryNonce, setSummaryNonce] = useState(0);
   const [queueFilter, setQueueFilter] = useState('');
 
@@ -252,17 +255,32 @@ export default function App() {
     let alive = true;
     if (!selectedClaimId) {
       setSummary({ paidLoss: null, recoveries: null });
+      setProcessData(EMPTY_PROCESS);
       return undefined;
     }
 
     setSummary({ paidLoss: null, recoveries: null });
+    setProcessData(EMPTY_PROCESS);
     Promise.allSettled([
+      api.coverage.get(selectedClaimId),
+      api.reserves.get(selectedClaimId),
+      api.litigation.list(selectedClaimId),
       api.settlements.list(selectedClaimId),
       api.recoveries.list(selectedClaimId)
-    ]).then(([settlementsResult, recoveriesResult]) => {
+    ]).then(([coverageResult, reservesResult, litigationResult, settlementsResult, recoveriesResult]) => {
       if (!alive) return;
+      const coverage = coverageResult.status === 'fulfilled' ? coverageResult.value : null;
+      const reserves = reservesResult.status === 'fulfilled' ? reservesResult.value : null;
+      const litigation = litigationResult.status === 'fulfilled' ? litigationResult.value : null;
       const settlements = settlementsResult.status === 'fulfilled' ? settlementsResult.value : null;
       const recoveries = recoveriesResult.status === 'fulfilled' ? recoveriesResult.value : null;
+      setProcessData({
+        coverage,
+        reserves,
+        litigation: Array.isArray(litigation) ? litigation : [],
+        settlements: Array.isArray(settlements) ? settlements : [],
+        recoveries: Array.isArray(recoveries) ? recoveries : []
+      });
       setSummary({
         paidLoss: sumBy(settlements, ['EXECUTED', 'PAID']),
         recoveries: sumBy(recoveries, ['RECEIVED'])
@@ -618,6 +636,8 @@ export default function App() {
                   <div className="eia-metric-label">Authorized limit before escalation</div>
                 </div>
               </div>
+
+              <ClaimProgress claim={selectedClaim} processData={processData} />
 
               <nav className="eia-tabs" role="tablist" aria-label="Claim sections">
                 {TABS.map((tab) => (

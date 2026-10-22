@@ -128,3 +128,15 @@ The format is based on Keep a Changelog and the project uses Semantic Versioning
   settlement or its paid loss automatically; the operator must unlink or re-execute the
   settlement as policy requires. Playwright covers the PAID badge without warning, the REVERSED
   warning and Payment link, status-read failure containment, and unlinking a reversed link.
+- Related notifications card: the Overview adds a **Related notifications** card after
+  **Payments** backed by `GET /api/v1/notifications?sourceType=DIRECT_CLAIM&sourceId=<claimId>`
+  with the tenant header and no book header. Rows are contained to this claim's `sourceId` (and
+  `DIRECT_CLAIM` when a type is present); the heading count covers every linked notification and
+  the table shows the newest three with the notification number linked to
+  `/notifications?record=<id>`, subject, status, and created date. Loading, failure, and empty
+  states stay inside the card and never block the claim, and the empty state reads **No
+  notifications linked to this claim.** Because the Notifications workbench has no URL source
+  filter (the source params only prefill a create draft when `new=1`), **View all notifications**
+  falls back to `/search?q=<claimNumber>`. Playwright covers the source path/query/headers,
+  newest-three ordering and count, unrelated-record exclusion, link targets, empty state, and
+  503 containment.

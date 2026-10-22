@@ -31,3 +31,12 @@ export function recordHref(route, recordId) {
   const path = `/${String(route || '').replace(/^\/+/, '')}`;
   return recordId ? `${path}?record=${encodeURIComponent(recordId)}` : path;
 }
+
+/**
+ * Builds the shell global-search route with a pre-filled term. Used when a
+ * target workbench has no URL filter for the scope being handed off.
+ */
+export function searchHref(term) {
+  const query = String(term || '').trim();
+  return query ? `/search?q=${encodeURIComponent(query)}` : '/search';
+}

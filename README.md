@@ -155,6 +155,20 @@ count. The lookup is card-local: loading, failure, and empty states never block 
 claim. The empty state explains the settlement hand-off, and the context note states that
 Payment owns approval and execution while the claim keeps the settlement and paid-loss record.
 
+The **Overview** adds a **Related notifications** card after **Payments**. It reads
+`GET /api/v1/notifications?sourceType=DIRECT_CLAIM&sourceId=<claimId>` with `X-EIA-Tenant` and no
+book header (Notifications is a tenant-scoped platform read) and accepts either a bare array or
+an `{items:[...]}` envelope. Rows are kept only when `sourceId` names this claim (and, when
+present, `sourceType` is `DIRECT_CLAIM`), so a shared Notifications service can never surface
+another record's messages. The heading count covers every linked notification and the table
+shows the newest three by `createdAt`: notification number linked to
+`/notifications?record=<id>`, subject, status, and created date. Loading, failure, and empty
+states stay inside the card and never block or alter the claim; the empty state reads
+**No notifications linked to this claim.** The Notifications workbench has no URL source filter
+(`sourceType`/`sourceId` are read only as create-draft prefill when `new=1`), so **View all
+notifications** falls back to the shell search route with the claim number:
+`/search?q=<claimNumber>`.
+
 The **Activity** tab sits after **Diary & Notes** and renders the claim's record timeline from the
 platform event inbox (`GET /api/v1/events/aggregate/{claimId}?limit=50`, scoped by
 `X-EIA-Tenant`). Rows show the `occurredAt` timestamp, a human-readable event name, the inbox
@@ -187,9 +201,13 @@ append-only event inbox and that the business claim record remains the source of
   free-text/static-team fallback), overview payments (source path/query plus tenant and DIRECT
   book headers, array and `{items}` payloads, rows/link/payee/created date, paid-and-pending
   summary, empty hand-off context, 503 containment, non-blocking loading, and claim-change
-  refetch), activity (aggregate path/tenant header, newest-first timeline, empty and 503
-  states, payload summaries, and claim-change refetch), and tab-set flows with a mocked API;
-  every domain request asserts the DIRECT book header.
+  refetch), related notifications (source path/query plus tenant header and no book header,
+  `sourceId`/`sourceType` containment, newest-three ordering and full count, row
+  number/subject/status/created and `/notifications?record=` links, the empty state, 503
+  containment, and the search fallback link), activity (aggregate path/tenant header,
+  newest-first timeline, empty and 503 states, payload summaries, and claim-change refetch),
+  and tab-set flows with a mocked API; every book-scoped domain request asserts the DIRECT book
+  header.
 
 ## Notes
 

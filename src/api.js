@@ -297,6 +297,21 @@ export const api = {
       request(`/api/v1/events/aggregate/${encodeURIComponent(claimId)}?limit=${limit}`, {
         book: null
       })
+  },
+  notifications: {
+    /**
+     * Notifications linked to one business source. Notifications is tenant
+     * scoped and its own workbench sends no book header, so the DIRECT wall is
+     * not sent on this platform read. Direct Claims asks for its claim source
+     * (`DIRECT_CLAIM` + the claim id) and renders the result read-only.
+     */
+    listBySource: (sourceType, sourceId) =>
+      request(
+        `/api/v1/notifications?sourceType=${encodeURIComponent(
+          sourceType
+        )}&sourceId=${encodeURIComponent(sourceId)}`,
+        { book: null }
+      )
   }
 };
 

@@ -83,6 +83,8 @@ async function installMocks(page, options = {}) {
     payments: (options.payments || []).map((row) => ({ ...row })),
     paymentListStatus: options.paymentListStatus || 200,
     paymentListMessage: options.paymentListMessage || 'Related claim payments are temporarily unavailable.',
+    paymentDetailStatus: options.paymentDetailStatus || 200,
+    paymentDetailMessage: options.paymentDetailMessage || 'Payment detail is temporarily unavailable.',
     paymentPatchStatus: options.paymentPatchStatus || 200,
     paymentPatchMessage: options.paymentPatchMessage || 'The payment link could not be saved.',
     claimListGets: 0,
@@ -208,6 +210,10 @@ async function installMocks(page, options = {}) {
     if (request.method() === 'GET') {
       const paymentId = url.pathname.slice('/api/v1/payments/'.length);
       state.paymentGets.push(paymentId);
+      if (state.paymentDetailStatus !== 200) {
+        await fulfillJson(route, { message: state.paymentDetailMessage }, state.paymentDetailStatus);
+        return;
+      }
       const found = state.payments.find((row) => row.id === paymentId);
       if (found) {
         await fulfillJson(route, found);
@@ -303,6 +309,134 @@ test('shows the linked payment number, a dash when unlinked, and linkable action
   const proposedRow = page.getByRole('row', { name: new RegExp(proposed.settlementNumber) });
   await expect(proposedRow.getByTestId(`link-payment-${proposed.id}`)).toHaveCount(0);
   await expect(proposedRow.getByTestId(`unlink-payment-${proposed.id}`)).toHaveCount(0);
+});
+
+test('shows a PAID status badge without a warning and reads it from Payment', async ({ page }) => {
+  const linked = settlement({
+    id: 'settlement-paid',
+    settlementNumber: 'SET-2026-0015',
+    status: 'EXECUTED',
+    paymentId: PAYMENT_ID,
+    paymentNumber: PAYMENT_NUMBER
+  });
+  const state = await installMocks(page, {
+    settlements: [linked],
+    payments: [payment()]
+  });
+  await openSettlements(page);
+
+  const row = page.getByRole('row', { name: new RegExp(linked.settlementNumber) });
+  await expect(row.getByTestId(`settlement-payment-${linked.id}`)).toHaveText(PAYMENT_NUMBER);
+
+  const badge = row.getByTestId(`settlement-payment-status-${linked.id}`);
+  await expect(badge).toHaveText('PAID');
+  await expect(badge).toHaveClass(/eia-pill/);
+  await expect(badge).toHaveClass(/green/);
+  await expect(row.getByTestId(`settlement-payment-warning-${linked.id}`)).toHaveCount(0);
+  await expect(row.getByTestId(`unlink-payment-${linked.id}`)).toBeVisible();
+
+  // The settlement projection carries only the number, so the status must
+  // come from GET /api/v1/payments/{paymentId}.
+  expect(state.paymentGets).toContain(PAYMENT_ID);
+});
+
+test('warns and links to Payment when the linked payment is REVERSED', async ({ page }) => {
+  const linked = settlement({
+    id: 'settlement-reversed',
+    settlementNumber: 'SET-2026-0016',
+    status: 'EXECUTED',
+    paymentId: PAYMENT_ID,
+    paymentNumber: PAYMENT_NUMBER
+  });
+  const state = await installMocks(page, {
+    settlements: [linked],
+    payments: [payment({ status: 'REVERSED' })]
+  });
+  await openSettlements(page);
+
+  const row = page.getByRole('row', { name: new RegExp(linked.settlementNumber) });
+  const badge = row.getByTestId(`settlement-payment-status-${linked.id}`);
+  await expect(badge).toHaveText('REVERSED');
+  await expect(badge).toHaveClass(/red/);
+
+  const warning = row.getByTestId(`settlement-payment-warning-${linked.id}`);
+  await expect(warning).toHaveText('Payment REVERSED — settlement link needs review');
+  await expect(warning).toHaveAttribute('href', `/payment?record=${PAYMENT_ID}`);
+
+  // A review warning never removes the operator's way out of the link.
+  await expect(row.getByTestId(`unlink-payment-${linked.id}`)).toBeVisible();
+  expect(state.paymentGets).toContain(PAYMENT_ID);
+
+  const context = page.getByTestId('settlement-link-context');
+  await expect(context).toContainText('evidence only');
+  await expect(context).toContainText('does not change the payment status');
+  await expect(context).toContainText('not changed automatically');
+  await expect(context).toContainText('unlink the payment or re-execute the settlement');
+});
+
+test('contains a payment status read failure and keeps the projected number', async ({ page }) => {
+  const linked = settlement({
+    id: 'settlement-status-failure',
+    settlementNumber: 'SET-2026-0017',
+    status: 'EXECUTED',
+    paymentId: PAYMENT_ID,
+    paymentNumber: PAYMENT_NUMBER
+  });
+  const state = await installMocks(page, {
+    settlements: [linked],
+    payments: [payment()],
+    paymentDetailStatus: 503,
+    paymentDetailMessage: 'Payment detail is temporarily unavailable.'
+  });
+  await openSettlements(page);
+
+  const row = page.getByRole('row', { name: new RegExp(linked.settlementNumber) });
+  await expect(row.getByTestId(`settlement-payment-${linked.id}`)).toHaveText(PAYMENT_NUMBER);
+  await expect(row.getByTestId(`settlement-payment-status-${linked.id}`)).toHaveCount(0);
+  await expect(row.getByTestId(`settlement-payment-warning-${linked.id}`)).toHaveCount(0);
+  await expect(row.getByTestId(`unlink-payment-${linked.id}`)).toBeVisible();
+  await expect(page.getByTestId('settlement-error')).toHaveCount(0);
+  expect(state.paymentGets).toContain(PAYMENT_ID);
+});
+
+test('unlinks a REVERSED linked payment and clears the warning', async ({ page }) => {
+  const linked = settlement({
+    id: 'settlement-reversed-unlink',
+    settlementNumber: 'SET-2026-0018',
+    status: 'EXECUTED',
+    paymentId: PAYMENT_ID,
+    paymentNumber: PAYMENT_NUMBER
+  });
+  const state = await installMocks(page, {
+    settlements: [linked],
+    payments: [payment({ status: 'REVERSED' })]
+  });
+  await openSettlements(page);
+
+  const row = page.getByRole('row', { name: new RegExp(linked.settlementNumber) });
+  await expect(row.getByTestId(`settlement-payment-warning-${linked.id}`)).toBeVisible();
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain(`Unlink ${PAYMENT_NUMBER} from ${linked.settlementNumber}`);
+    await dialog.accept();
+  });
+  await row.getByTestId(`unlink-payment-${linked.id}`).click();
+
+  await expect(page.getByTestId('settlement-status')).toContainText(
+    `${linked.settlementNumber} unlinked from ${PAYMENT_NUMBER}`
+  );
+  await expect(row.getByTestId(`settlement-payment-${linked.id}`)).toHaveText('—');
+  await expect(row.getByTestId(`settlement-payment-status-${linked.id}`)).toHaveCount(0);
+  await expect(row.getByTestId(`settlement-payment-warning-${linked.id}`)).toHaveCount(0);
+  await expect(row.getByTestId(`unlink-payment-${linked.id}`)).toHaveCount(0);
+  await expect(row.getByTestId(`link-payment-${linked.id}`)).toBeVisible();
+
+  expect(state.paymentLinkPatches).toHaveLength(1);
+  expect(state.paymentLinkPatches[0].path).toBe(
+    `/api/v1/claims/${CLAIM_ID}/settlements/${linked.id}/payment`
+  );
+  expect(state.paymentLinkPatches[0].body).toEqual({ paymentId: null });
+  expect(state.settlements.find((entry) => entry.id === linked.id).paymentId).toBeNull();
 });
 
 test('links a PAID DIRECT_CLAIM payment with the PATCH payload and updates the row', async ({ page }) => {

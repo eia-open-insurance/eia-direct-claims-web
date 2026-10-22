@@ -34,10 +34,33 @@ function canLinkPayment(status) {
   return LINKABLE_SETTLEMENT_STATUSES.includes(String(status || '').toUpperCase());
 }
 
+/**
+ * Payment outcomes that undo a PAID payment after the settlement link was
+ * recorded. The link itself is only evidence, so these rows still point at the
+ * payment; the operator has to review the link instead of the workbench
+ * silently changing the settlement or its paid loss.
+ */
+const PAYMENT_REVIEW_STATUSES = ['REVERSED', 'RETURNED', 'VOID', 'CANCELLED', 'FAILED'];
+
+function paymentNeedsReview(status) {
+  return PAYMENT_REVIEW_STATUSES.includes(String(status || '').toUpperCase());
+}
+
 /** The payment number, preferring the settlement projection over a hydrated lookup. */
-function paymentNumberFor(row, paymentNumbers) {
+function paymentNumberFor(row, paymentDetails) {
   if (!row?.paymentId) return '';
-  return row.paymentNumber || paymentNumbers[row.paymentId] || '';
+  return row.paymentNumber || paymentDetails[row.paymentId]?.paymentNumber || '';
+}
+
+/**
+ * The live payment status, preferring the Payment read over a projection.
+ * Payment owns the lifecycle, so a status cached on the settlement is only a
+ * fallback for when the detail read is unavailable.
+ */
+function paymentStatusFor(row, paymentDetails) {
+  if (!row?.paymentId) return '';
+  const hydrated = paymentDetails[row.paymentId]?.status;
+  return String(hydrated || row.paymentStatus || '').toUpperCase();
 }
 
 /**
@@ -189,38 +212,46 @@ export default function SettlementTab({ claim, onChanged }) {
   const [formError, setFormError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
-  const [paymentNumbers, setPaymentNumbers] = useState({});
+  const [paymentDetails, setPaymentDetails] = useState({});
   const [linkTarget, setLinkTarget] = useState(null);
 
   async function load() {
     const rows = await api.settlements.list(claim.id);
     setSettlements(rows);
 
-    // Some projections carry only paymentId. Hydrate the payment number so the
-    // Payment column can show the business key rather than a raw UUID.
+    // Some projections carry only paymentId, and the settlement projection
+    // never carries the current payment status. Hydrate both from Payment so
+    // the Payment column can show the business key and a live status badge.
     const list = Array.isArray(rows) ? rows : [];
-    const missing = [
-      ...new Set(
-        list
-          .filter((row) => row.paymentId && !row.paymentNumber)
-          .map((row) => row.paymentId)
-      )
-    ];
-    if (missing.length === 0) return;
+    const linked = [...new Set(list.filter((row) => row.paymentId).map((row) => row.paymentId))];
+    if (linked.length === 0) return;
     const entries = await Promise.all(
-      missing.map(async (paymentId) => {
+      linked.map(async (paymentId) => {
         try {
           const detail = await api.payments.get(paymentId);
-          return [paymentId, detail?.paymentNumber || ''];
+          return [
+            paymentId,
+            {
+              paymentNumber: detail?.paymentNumber || '',
+              status: String(detail?.status || '').toUpperCase()
+            }
+          ];
         } catch {
-          return [paymentId, ''];
+          // A failed Payment read must not block the settlement record. Keep
+          // the number the projection already supplied and show no status.
+          return [paymentId, null];
         }
       })
     );
-    setPaymentNumbers((current) => {
+    setPaymentDetails((current) => {
       const next = { ...current };
-      entries.forEach(([paymentId, number]) => {
-        if (number && !next[paymentId]) next[paymentId] = number;
+      entries.forEach(([paymentId, detail]) => {
+        if (!detail) return;
+        const previous = next[paymentId] || {};
+        next[paymentId] = {
+          paymentNumber: detail.paymentNumber || previous.paymentNumber || '',
+          status: detail.status || previous.status || ''
+        };
       });
       return next;
     });
@@ -230,7 +261,7 @@ export default function SettlementTab({ claim, onChanged }) {
     setError('');
     setFormError('');
     setNotice('');
-    setPaymentNumbers({});
+    setPaymentDetails({});
     setLinkTarget(null);
     load().catch((cause) => setError(cause.message));
   }, [claim.id]);
@@ -313,7 +344,13 @@ export default function SettlementTab({ claim, onChanged }) {
     if (!target) return;
     setLinkTarget(null);
     setError('');
-    setPaymentNumbers((current) => ({ ...current, [payment.id]: payment.paymentNumber }));
+    setPaymentDetails((current) => ({
+      ...current,
+      [payment.id]: {
+        paymentNumber: payment.paymentNumber,
+        status: String(payment.status || '').toUpperCase()
+      }
+    }));
     applyLink(target.id, updated, {
       paymentId: payment.id,
       paymentNumber: payment.paymentNumber
@@ -328,7 +365,7 @@ export default function SettlementTab({ claim, onChanged }) {
   async function unlink(settlement) {
     if (busy || !settlement.paymentId) return;
     const label =
-      paymentNumberFor(settlement, paymentNumbers) || shortId(settlement.paymentId);
+      paymentNumberFor(settlement, paymentDetails) || shortId(settlement.paymentId);
     const confirmed = window.confirm(
       `Unlink ${label} from ${settlement.settlementNumber}?\n\n` +
         'Linking is settlement evidence only. Unlinking removes the reference; the payment ' +
@@ -373,18 +410,44 @@ export default function SettlementTab({ claim, onChanged }) {
                 if (!row.paymentId) {
                   return <span data-testid={`settlement-payment-${row.id}`}>—</span>;
                 }
-                const number = paymentNumberFor(row, paymentNumbers);
+                const number = paymentNumberFor(row, paymentDetails);
                 const label = number || shortId(row.paymentId);
+                const href = recordHref('payment', row.paymentId);
+                const status = paymentStatusFor(row, paymentDetails);
+                const needsReview = paymentNeedsReview(status);
                 return (
-                  <a
-                    className="eia-mono"
-                    href={recordHref('payment', row.paymentId)}
-                    onClick={openPayment}
-                    data-testid={`settlement-payment-${row.id}`}
-                    title={`Open payment ${label}`}
-                  >
-                    {label}
-                  </a>
+                  <div style={{ display: 'grid', gap: 4, justifyItems: 'start' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      <a
+                        className="eia-mono"
+                        href={href}
+                        onClick={openPayment}
+                        data-testid={`settlement-payment-${row.id}`}
+                        title={`Open payment ${label}`}
+                      >
+                        {label}
+                      </a>
+                      {status && (
+                        <span
+                          className={`eia-pill ${needsReview ? 'red' : statusTone(status)}`}
+                          data-testid={`settlement-payment-status-${row.id}`}
+                        >
+                          {status}
+                        </span>
+                      )}
+                    </span>
+                    {needsReview && (
+                      <a
+                        href={href}
+                        onClick={openPayment}
+                        data-testid={`settlement-payment-warning-${row.id}`}
+                        title={`Review payment ${label} in the Payment workbench`}
+                        style={{ color: 'var(--eia-red)', fontSize: 11, fontWeight: 700 }}
+                      >
+                        {`Payment ${status} — settlement link needs review`}
+                      </a>
+                    )}
+                  </div>
                 );
               }
             },
@@ -422,7 +485,7 @@ export default function SettlementTab({ claim, onChanged }) {
                       Link payment
                     </button>
                   )}
-                  {canLinkPayment(row.status) && row.paymentId && (
+                  {row.paymentId && (
                     <button
                       type="button"
                       className="eia-btn-secondary"
@@ -459,8 +522,11 @@ export default function SettlementTab({ claim, onChanged }) {
         )}
         <p className="eia-muted" data-testid="settlement-link-context" style={{ margin: '10px 0 0' }}>
           Linking a payment to an authorized or executed settlement records evidence that the
-          payment settled it. Linking does not change the payment status or the settlement&apos;s
-          paid loss; Payment remains the system of record.
+          payment settled it. Linking is evidence only: it does not change the payment status or
+          the settlement&apos;s paid loss, and Payment remains the system of record. If a linked
+          payment is later reversed, returned, voided, cancelled, or failed, the settlement and
+          its paid loss are not changed automatically; the operator must unlink the payment or
+          re-execute the settlement as policy requires.
         </p>
       </Panel>
 

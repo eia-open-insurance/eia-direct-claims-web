@@ -106,3 +106,14 @@ The format is based on Keep a Changelog and the project uses Semantic Versioning
   not change the payment status or the settlement paid loss. Playwright covers display/hydration,
   the PAID-only picker and link payload, unlink confirmation and payload, no-payment guidance,
   and PATCH/list error containment.
+- Settlement-linked payment status warning: the **Payment** column now also hydrates the live
+  payment status from `GET /api/v1/payments/{paymentId}` and shows it as a badge (`PAID` is
+  green). A linked payment that is no longer PAID (`REVERSED`, `RETURNED`, `VOID`, `CANCELLED`,
+  or `FAILED`) shows a red badge and the warning **Payment &lt;status&gt; — settlement link needs
+  review**, linked to the payment record. The status read is containment-only: a failed request
+  leaves the projected payment number, shows no badge or warning, and never blocks the
+  settlement record. **Unlink** remains available for every linked row so the operator can
+  remove the evidence, and the context note states that a reversed payment does not change the
+  settlement or its paid loss automatically; the operator must unlink or re-execute the
+  settlement as policy requires. Playwright covers the PAID badge without warning, the REVERSED
+  warning and Payment link, status-read failure containment, and unlinking a reversed link.

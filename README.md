@@ -112,9 +112,15 @@ saves it. The Settlements tab lists related payments via
 `GET /api/v1/payments/search?q=<claimId>&limit=5` and links each one back to `/payment?record=<id>`.
 
 An **AUTHORIZED** or **EXECUTED** settlement can also be linked to an existing paid claim
-payment. The settlements table adds a **Payment** column showing the linked payment number
-(hydrated through `GET /api/v1/payments/{paymentId}` when a projection carries only `paymentId`),
-or **—** when unlinked. Rows offer **Link payment**, and **Unlink** once linked. The link dialog
+payment. The settlements table adds a **Payment** column showing the linked payment number and
+status (both hydrated through `GET /api/v1/payments/{paymentId}` when the settlement projection
+carries only `paymentId`), or **—** when unlinked. A `PAID` payment shows a green status badge.
+If the linked payment is no longer `PAID` (`REVERSED`, `RETURNED`, `VOID`, `CANCELLED`, or
+`FAILED`), the row shows a red badge and the warning **Payment &lt;status&gt; — settlement link
+needs review** linked to the payment record. A failed status read is contained: the projected
+number still renders, no badge or warning is invented, and the tab stays usable. Rows offer
+**Link payment**, and **Unlink** stays available once linked, including while the warning is
+shown. The link dialog
 reads `GET /api/v1/payments?sourceType=DIRECT_CLAIM&sourceId=<claimId>` with `X-EIA-Tenant` and
 `X-EIA-Book: DIRECT`, lists only `PAID` payments with source `DIRECT_CLAIM`, and shows a payment
 already linked to another settlement on the claim with a **Linked to …** badge and a disabled
@@ -124,7 +130,9 @@ unlinking asks for confirmation and sends `{ "paymentId": null }`. The row updat
 response and the claim record refreshes. When no PAID claim payment exists, the dialog explains
 that a payment must be created, approved, and paid in the Payment workbench first and links to
 the settlement hand-off. Linking records evidence only: it does not change the payment status or
-the settlement paid loss, and Payment remains the system of record.
+the settlement paid loss, and Payment remains the system of record. A reversed, returned, voided,
+cancelled, or failed payment does not change the settlement or its paid loss automatically; the
+operator must unlink the payment or re-execute the settlement as policy requires.
 
 The **Overview** adds a **Payments** card after **Documents**. It reads the claim-scoped
 `GET /api/v1/payments?sourceType=DIRECT_CLAIM&sourceId=<claimId>` with `X-EIA-Tenant` and
@@ -155,9 +163,11 @@ append-only event inbox and that the business claim record remains the source of
   payload, posted/failed erosion badges, failed-row message and retry endpoint, no-limit
   behavior, limit-read failure containment/retry, empty and loading states, 503
   containment/retry, and 409 conflict reload), settlement-to-payment hand-off,
-  related-payments, settlement payment linking (Payment column/hydration, PAID-only
-  `DIRECT_CLAIM` picker with already-linked payments disabled, link/unlink PATCH payloads,
-  unlink confirmation, no-PAID-payment guidance, and PATCH/list error containment),
+  related-payments, settlement payment linking (Payment column/number and live status
+  hydration, PAID badge without warning, REVERSED badge/warning/context and Payment link,
+  contained status-read failure, PAID-only `DIRECT_CLAIM` picker with already-linked payments
+  disabled, link/unlink PATCH payloads, unlink confirmation including a reversed link,
+  no-PAID-payment guidance, and PATCH/list error containment),
   assignment (directory
   fetch/cache, person options with role hints, team filtering, displayName/team submission,
   pre-filled and unassigned states, queue filtering, 409 stale reload, and the directory-503

@@ -93,6 +93,17 @@ The format is based on Keep a Changelog and the project uses Semantic Versioning
   Playwright covers the limit fetch/flatten/options, optional `limitId` payload, posted and
   failed badges, the retry endpoint, no-limit behavior, create-time failure, retry failure, and
   limit-read failure containment.
+- Litigation entry: the **Litigation** tab replaces the raw counsel party id input with the
+  shared predictive party picker (`/api/v1/parties/search`), keeping the selected party id and
+  label together and linking to `/party?record=<id>`; saved matters resolve the counsel label
+  from the party detail read with a short-id fallback. An optional **Damages sought** pair adds
+  an amount and a three-letter ISO 4217 currency field (both or neither, amount positive), a
+  **Damages sought** table column, and a pleaded-amount detail. The create payload sends
+  `damagesSought` and `damagesCurrency` when present and omits both when blank. The
+  context panel states that counsel is a party record and damages sought is the pleaded amount,
+  separate from the claim reserve and settlement authority. Playwright covers predictive
+  selection and the party link, the create payload and table display, pair/positive/currency-code
+  validation, empty-pair omission, and counsel/damages display on a saved matter.
 - Settlement payment linking: **AUTHORIZED** and **EXECUTED** settlements gain a **Payment**
   column and **Link payment**/**Unlink** actions. The picker reads
   `GET /api/v1/payments?sourceType=DIRECT_CLAIM&sourceId=<claimId>` with the tenant and DIRECT

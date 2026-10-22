@@ -76,6 +76,17 @@ empty states stay inside the tab. Allocation distributes the claim loss across p
 layers; it does not change the reserve or the coverage position, and Policy owns the limit
 ledger.
 
+The **Litigation** tab replaces the raw counsel party id input with the shared predictive party
+picker (`/api/v1/parties/search`). The selected party id and label are kept together and the
+record links to `/party?record=<id>`; a saved matter resolves the counsel label through the party
+detail read and falls back to the short id when the lookup is unavailable. The optional
+**Damages sought** pair records the amount pleaded in the litigation with its own three-letter
+ISO 4217 currency: both members are required together (or neither), the amount must be positive,
+and a blank pair is omitted from the create payload. The table adds a **Damages sought** column
+and the form shows a pleaded-amount detail. The context panel states that counsel is a party
+record and damages sought is the pleaded amount, separate from the claim reserve and settlement
+authority.
+
 Ownership is visible in the record header, the **Assigned to** summary card, and each queue
 row (`assignedAdjuster` / `assignedTeam`, or **Unassigned**). **Assign** opens a dialog with:
 
@@ -168,7 +179,9 @@ append-only event inbox and that the business claim record remains the source of
   contained status-read failure, PAID-only `DIRECT_CLAIM` picker with already-linked payments
   disabled, link/unlink PATCH payloads, unlink confirmation including a reversed link,
   no-PAID-payment guidance, and PATCH/list error containment),
-  assignment (directory
+  litigation (predictive counsel party search and selected-party link, counsel id/label state,
+  damages pair/positive/currency-code validation, optional payload members, table display,
+  empty-pair omission, and saved-matter counsel/damages display with context), assignment (directory
   fetch/cache, person options with role hints, team filtering, displayName/team submission,
   pre-filled and unassigned states, queue filtering, 409 stale reload, and the directory-503
   free-text/static-team fallback), overview payments (source path/query plus tenant and DIRECT

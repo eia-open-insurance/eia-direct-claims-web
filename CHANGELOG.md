@@ -93,3 +93,16 @@ The format is based on Keep a Changelog and the project uses Semantic Versioning
   Playwright covers the limit fetch/flatten/options, optional `limitId` payload, posted and
   failed badges, the retry endpoint, no-limit behavior, create-time failure, retry failure, and
   limit-read failure containment.
+- Settlement payment linking: **AUTHORIZED** and **EXECUTED** settlements gain a **Payment**
+  column and **Link payment**/**Unlink** actions. The picker reads
+  `GET /api/v1/payments?sourceType=DIRECT_CLAIM&sourceId=<claimId>` with the tenant and DIRECT
+  book headers, lists only PAID claim payments, and shows payments already linked to another
+  settlement as disabled with a **Linked to …** badge. Saving patches
+  `/api/v1/claims/{claimId}/settlements/{settlementId}/payment` with `{paymentId}`; unlinking
+  confirms first and sends `{paymentId: null}`. The row updates from the response (hydrating a
+  missing payment number through `GET /api/v1/payments/{paymentId}`), the claim record refreshes,
+  and the no-PAID state explains that a payment must be created, approved, and paid in the
+  Payment workbench first. The context note states that linking records evidence only: it does
+  not change the payment status or the settlement paid loss. Playwright covers display/hydration,
+  the PAID-only picker and link payload, unlink confirmation and payload, no-payment guidance,
+  and PATCH/list error containment.

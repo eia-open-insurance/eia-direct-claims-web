@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api, money, RELEASE_DOCUMENT_ID, REVIEWER_ID } from './api.js';
 import { navigate, recordHref } from './navigation.js';
+import SettlementPaymentLink from './SettlementPaymentLink.jsx';
 import { DataTable, ErrorText, Field, Panel, shortId, statusTone } from './ui.jsx';
 
 const EMPTY = {
@@ -17,8 +18,26 @@ const EMPTY = {
  */
 const PAYABLE_SETTLEMENT_STATUSES = ['AUTHORIZED', 'EXECUTED', 'APPROVED', 'PAID'];
 
+/**
+ * Only these direct-claims settlement states can carry a payment link. A
+ * proposed settlement has not been authorized, and a denied one cannot be
+ * settled; APPROVED/PAID remain payable for compatibility but are not link
+ * targets in this workbench.
+ */
+const LINKABLE_SETTLEMENT_STATUSES = ['AUTHORIZED', 'EXECUTED'];
+
 function isPayable(status) {
   return PAYABLE_SETTLEMENT_STATUSES.includes(String(status || '').toUpperCase());
+}
+
+function canLinkPayment(status) {
+  return LINKABLE_SETTLEMENT_STATUSES.includes(String(status || '').toUpperCase());
+}
+
+/** The payment number, preferring the settlement projection over a hydrated lookup. */
+function paymentNumberFor(row, paymentNumbers) {
+  if (!row?.paymentId) return '';
+  return row.paymentNumber || paymentNumbers[row.paymentId] || '';
 }
 
 /**
@@ -167,13 +186,52 @@ export default function SettlementTab({ claim, onChanged }) {
   const [settlements, setSettlements] = useState([]);
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState('');
+  const [formError, setFormError] = useState('');
+  const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [paymentNumbers, setPaymentNumbers] = useState({});
+  const [linkTarget, setLinkTarget] = useState(null);
 
   async function load() {
-    setSettlements(await api.settlements.list(claim.id));
+    const rows = await api.settlements.list(claim.id);
+    setSettlements(rows);
+
+    // Some projections carry only paymentId. Hydrate the payment number so the
+    // Payment column can show the business key rather than a raw UUID.
+    const list = Array.isArray(rows) ? rows : [];
+    const missing = [
+      ...new Set(
+        list
+          .filter((row) => row.paymentId && !row.paymentNumber)
+          .map((row) => row.paymentId)
+      )
+    ];
+    if (missing.length === 0) return;
+    const entries = await Promise.all(
+      missing.map(async (paymentId) => {
+        try {
+          const detail = await api.payments.get(paymentId);
+          return [paymentId, detail?.paymentNumber || ''];
+        } catch {
+          return [paymentId, ''];
+        }
+      })
+    );
+    setPaymentNumbers((current) => {
+      const next = { ...current };
+      entries.forEach(([paymentId, number]) => {
+        if (number && !next[paymentId]) next[paymentId] = number;
+      });
+      return next;
+    });
   }
 
   useEffect(() => {
+    setError('');
+    setFormError('');
+    setNotice('');
+    setPaymentNumbers({});
+    setLinkTarget(null);
     load().catch((cause) => setError(cause.message));
   }, [claim.id]);
 
@@ -184,7 +242,7 @@ export default function SettlementTab({ claim, onChanged }) {
   async function submit(event) {
     event.preventDefault();
     setBusy(true);
-    setError('');
+    setFormError('');
     try {
       await api.settlements.propose(claim.id, {
         amount: form.amount,
@@ -196,7 +254,7 @@ export default function SettlementTab({ claim, onChanged }) {
       setForm(EMPTY);
       await load();
     } catch (cause) {
-      setError(cause.message);
+      setFormError(cause.message);
     } finally {
       setBusy(false);
     }
@@ -205,6 +263,7 @@ export default function SettlementTab({ claim, onChanged }) {
   async function action(settlement, kind) {
     setBusy(true);
     setError('');
+    setNotice('');
     try {
       if (kind === 'approve') {
         await api.settlements.approve(claim.id, settlement.id, {
@@ -221,6 +280,70 @@ export default function SettlementTab({ claim, onChanged }) {
       }
       await load();
       if (onChanged) await onChanged();
+      setNotice(
+        `${settlement.settlementNumber} ${kind === 'approve' ? 'approved' : 'executed'}.`
+      );
+    } catch (cause) {
+      setError(cause.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Merges the server settlement over the row, with the known link as fallback. */
+  function applyLink(settlementId, updated, fallback) {
+    setSettlements((current) =>
+      current.map((row) => {
+        if (row.id !== settlementId) return row;
+        const server = updated && updated.id === settlementId ? updated : {};
+        return { ...row, ...server, ...fallback };
+      })
+    );
+  }
+
+  function openLink(settlement) {
+    if (busy) return;
+    setError('');
+    setNotice('');
+    setLinkTarget(settlement);
+  }
+
+  function handleLinked(updated, payment) {
+    const target = linkTarget;
+    if (!target) return;
+    setLinkTarget(null);
+    setError('');
+    setPaymentNumbers((current) => ({ ...current, [payment.id]: payment.paymentNumber }));
+    applyLink(target.id, updated, {
+      paymentId: payment.id,
+      paymentNumber: payment.paymentNumber
+    });
+    setNotice(
+      `${target.settlementNumber} linked to ${payment.paymentNumber}. ` +
+        'Payment status and settlement paid loss are unchanged.'
+    );
+    if (onChanged) onChanged();
+  }
+
+  async function unlink(settlement) {
+    if (busy || !settlement.paymentId) return;
+    const label =
+      paymentNumberFor(settlement, paymentNumbers) || shortId(settlement.paymentId);
+    const confirmed = window.confirm(
+      `Unlink ${label} from ${settlement.settlementNumber}?\n\n` +
+        'Linking is settlement evidence only. Unlinking removes the reference; the payment ' +
+        'and the settlement paid loss are not changed.'
+    );
+    if (!confirmed) return;
+
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const updated = await api.settlements.linkPayment(claim.id, settlement.id, null);
+      applyLink(settlement.id, updated, { paymentId: null, paymentNumber: null });
+      setNotice(`${settlement.settlementNumber} unlinked from ${label}.`);
+      if (onChanged) await onChanged();
     } catch (cause) {
       setError(cause.message);
     } finally {
@@ -230,6 +353,12 @@ export default function SettlementTab({ claim, onChanged }) {
 
   return (
     <>
+      {notice && (
+        <p role="status" data-testid="settlement-status" style={{ margin: '0 0 12px' }}>
+          {notice}
+        </p>
+      )}
+
       <Panel title="Settlements">
         <DataTable
           columns={[
@@ -237,6 +366,28 @@ export default function SettlementTab({ claim, onChanged }) {
             { key: 'amount', label: 'Amount', align: 'right', render: (row) => money(row.amount, row.currency) },
             { key: 'structure', label: 'Structure' },
             { key: 'status', label: 'Status' },
+            {
+              key: 'payment',
+              label: 'Payment',
+              render: (row) => {
+                if (!row.paymentId) {
+                  return <span data-testid={`settlement-payment-${row.id}`}>—</span>;
+                }
+                const number = paymentNumberFor(row, paymentNumbers);
+                const label = number || shortId(row.paymentId);
+                return (
+                  <a
+                    className="eia-mono"
+                    href={recordHref('payment', row.paymentId)}
+                    onClick={openPayment}
+                    data-testid={`settlement-payment-${row.id}`}
+                    title={`Open payment ${label}`}
+                  >
+                    {label}
+                  </a>
+                );
+              }
+            },
             { key: 'approvalAuthority', label: 'Authority', render: (row) => row.approvalAuthority || '—' },
             {
               key: 'actions',
@@ -259,6 +410,30 @@ export default function SettlementTab({ claim, onChanged }) {
                   >
                     {`Execute ${row.settlementNumber}`}
                   </button>
+                  {canLinkPayment(row.status) && !row.paymentId && (
+                    <button
+                      type="button"
+                      className="eia-btn-secondary"
+                      disabled={busy}
+                      onClick={() => openLink(row)}
+                      data-testid={`link-payment-${row.id}`}
+                      title={`Link a PAID payment to ${row.settlementNumber}`}
+                    >
+                      Link payment
+                    </button>
+                  )}
+                  {canLinkPayment(row.status) && row.paymentId && (
+                    <button
+                      type="button"
+                      className="eia-btn-secondary"
+                      disabled={busy}
+                      onClick={() => unlink(row)}
+                      data-testid={`unlink-payment-${row.id}`}
+                      title={`Unlink the payment from ${row.settlementNumber}`}
+                    >
+                      Unlink
+                    </button>
+                  )}
                   {isPayable(row.status) && (
                     <a
                       className="eia-btn-secondary"
@@ -277,6 +452,16 @@ export default function SettlementTab({ claim, onChanged }) {
           rows={settlements}
           emptyText="No settlement."
         />
+        {error && (
+          <div data-testid="settlement-error">
+            <ErrorText>{error}</ErrorText>
+          </div>
+        )}
+        <p className="eia-muted" data-testid="settlement-link-context" style={{ margin: '10px 0 0' }}>
+          Linking a payment to an authorized or executed settlement records evidence that the
+          payment settled it. Linking does not change the payment status or the settlement&apos;s
+          paid loss; Payment remains the system of record.
+        </p>
       </Panel>
 
       <RelatedPayments claim={claim} />
@@ -314,8 +499,19 @@ export default function SettlementTab({ claim, onChanged }) {
           </Field>
           <button type="submit" disabled={busy}>Propose settlement</button>
         </form>
-        <ErrorText>{error}</ErrorText>
+        <ErrorText>{formError}</ErrorText>
       </Panel>
+
+      {linkTarget && canLinkPayment(linkTarget.status) && (
+        <SettlementPaymentLink
+          claim={claim}
+          settlement={linkTarget}
+          settlements={settlements}
+          createPaymentHref={paymentHref(claim, linkTarget)}
+          onClose={() => setLinkTarget(null)}
+          onLinked={handleLinked}
+        />
+      )}
     </>
   );
 }

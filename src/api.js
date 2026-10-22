@@ -222,6 +222,17 @@ export const api = {
       request(`/api/v1/claims/${claimId}/settlements/${settlementId}/execute`, {
         method: 'POST',
         body: JSON.stringify(body)
+      }),
+    /**
+     * Records which PAID claim payment settled this settlement. The link is
+     * evidence only: Direct Claims does not execute, approve, or alter the
+     * Payment, and the settlement's amount and paid loss are unchanged.
+     * Pass `null` to remove the link.
+     */
+    linkPayment: (claimId, settlementId, paymentId) =>
+      request(`/api/v1/claims/${claimId}/settlements/${settlementId}/payment`, {
+        method: 'PATCH',
+        body: JSON.stringify({ paymentId })
       })
   },
   payments: {

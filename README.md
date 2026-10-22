@@ -111,6 +111,21 @@ Direct Claims never creates the payment itself; the Payment workbench confirms t
 saves it. The Settlements tab lists related payments via
 `GET /api/v1/payments/search?q=<claimId>&limit=5` and links each one back to `/payment?record=<id>`.
 
+An **AUTHORIZED** or **EXECUTED** settlement can also be linked to an existing paid claim
+payment. The settlements table adds a **Payment** column showing the linked payment number
+(hydrated through `GET /api/v1/payments/{paymentId}` when a projection carries only `paymentId`),
+or **—** when unlinked. Rows offer **Link payment**, and **Unlink** once linked. The link dialog
+reads `GET /api/v1/payments?sourceType=DIRECT_CLAIM&sourceId=<claimId>` with `X-EIA-Tenant` and
+`X-EIA-Book: DIRECT`, lists only `PAID` payments with source `DIRECT_CLAIM`, and shows a payment
+already linked to another settlement on the claim with a **Linked to …** badge and a disabled
+selector so it cannot be linked twice. Saving sends
+`PATCH /api/v1/claims/{claimId}/settlements/{settlementId}/payment` with `{ "paymentId": … }`;
+unlinking asks for confirmation and sends `{ "paymentId": null }`. The row updates from the
+response and the claim record refreshes. When no PAID claim payment exists, the dialog explains
+that a payment must be created, approved, and paid in the Payment workbench first and links to
+the settlement hand-off. Linking records evidence only: it does not change the payment status or
+the settlement paid loss, and Payment remains the system of record.
+
 The **Overview** adds a **Payments** card after **Documents**. It reads the claim-scoped
 `GET /api/v1/payments?sourceType=DIRECT_CLAIM&sourceId=<claimId>` with `X-EIA-Tenant` and
 `X-EIA-Book: DIRECT` (the same book wall the workbench's other Payment calls send) and accepts
@@ -140,7 +155,10 @@ append-only event inbox and that the business claim record remains the source of
   payload, posted/failed erosion badges, failed-row message and retry endpoint, no-limit
   behavior, limit-read failure containment/retry, empty and loading states, 503
   containment/retry, and 409 conflict reload), settlement-to-payment hand-off,
-  related-payments, assignment (directory
+  related-payments, settlement payment linking (Payment column/hydration, PAID-only
+  `DIRECT_CLAIM` picker with already-linked payments disabled, link/unlink PATCH payloads,
+  unlink confirmation, no-PAID-payment guidance, and PATCH/list error containment),
+  assignment (directory
   fetch/cache, person options with role hints, team filtering, displayName/team submission,
   pre-filled and unassigned states, queue filtering, 409 stale reload, and the directory-503
   free-text/static-team fallback), overview payments (source path/query plus tenant and DIRECT

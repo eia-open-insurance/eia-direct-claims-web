@@ -1,5 +1,16 @@
 import { test, expect } from '@playwright/test';
 
+const REVIEWER_PARTY_ID = '44444444-4444-7444-8444-444444444444';
+
+const REVIEWER_ITEM = {
+  id: REVIEWER_PARTY_ID,
+  type: 'PARTY',
+  label: 'PTY-2026-0088',
+  secondary: 'Dana Whitfield · REVIEWER',
+  status: 'ACTIVE',
+  href: `/party?record=${REVIEWER_PARTY_ID}`
+};
+
 const CLAIM = {
   id: '0192f3a4-2b7e-7d1f-a9c4-3e8b5f0c9d21',
   tenantId: '11111111-1111-7111-8111-111111111111',
@@ -22,6 +33,35 @@ const CLAIM = {
   createdAt: '2026-03-18T09:00:00Z',
   updatedAt: '2026-03-18T09:00:00Z'
 };
+
+/**
+ * Party master data used by the coverage reviewer picker. Search returns the
+ * reviewer, detail resolves its display label for the selected-party link.
+ */
+async function routeParties(page) {
+  await page.route('**/api/v1/parties/**', async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname === '/api/v1/parties/search') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ query: url.searchParams.get('q'), limit: 8, items: [REVIEWER_ITEM] })
+      });
+      return;
+    }
+    const partyId = url.pathname.split('/').pop();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: partyId,
+        displayName: partyId === REVIEWER_PARTY_ID ? 'Dana Whitfield' : 'Meridian Manufacturing',
+        partyNumber: partyId === REVIEWER_PARTY_ID ? 'PTY-2026-0088' : 'PTY-2026-0001'
+      })
+    });
+  });
+}
 
 function detailRoute(page, state) {
   return page.route('**/api/v1/claims/**', async (route) => {
@@ -173,6 +213,7 @@ test('records a coverage decision in the workbench', async ({ page }) => {
   await page.route('**/api/v1/claims', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([CLAIM]) });
   });
+  await routeParties(page);
   await detailRoute(page, state);
 
   await page.goto('/');
@@ -184,14 +225,18 @@ test('records a coverage decision in the workbench', async ({ page }) => {
 
   await page.getByLabel('Coverage basis').fill('Policy year 2024 responds to the continuous trigger');
   await page.getByLabel('Policy provisions').fill('Coverage A; occurrence trigger');
+  await page.getByPlaceholder('Search reviewer party number or name…').fill('Whitfield');
+  await page.getByRole('button', { name: /PTY-2026-0088/ }).click();
   await page.getByRole('button', { name: 'Record coverage decision' }).click();
 
   await expect(page.getByTestId('coverage-position')).toHaveText('COVERED');
   await expect(page.getByTestId('coverage-basis')).toHaveText(
     'Policy year 2024 responds to the continuous trigger'
   );
+  await expect(page.getByTestId('coverage-reviewer-link')).toHaveText('PTY-2026-0088');
   expect(state.coverageBody.position).toBe('COVERED');
   expect(state.coverageBody.basis).toContain('continuous trigger');
+  expect(state.coverageBody.reviewerPartyId).toBe(REVIEWER_PARTY_ID);
   expect(state.requests.every((entry) => entry.book === 'DIRECT')).toBeTruthy();
 });
 

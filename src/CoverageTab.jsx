@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { api, REVIEWER_ID, today } from './api.js';
-import { ErrorText, Field, Panel } from './ui.jsx';
+import { api, today } from './api.js';
+import EntityPicker from './EntityPicker.jsx';
+import { navigate } from './navigation.js';
+import { partyLabel } from './related.jsx';
+import { ErrorText, Field, Panel, shortId } from './ui.jsx';
 
 const EMPTY = {
   position: 'COVERED',
@@ -8,40 +11,130 @@ const EMPTY = {
   policyProvisions: '',
   allocationMethod: 'PRO_RATA_TIME',
   allocationPct: '1.000000',
-  reviewerPartyId: REVIEWER_ID,
-  decisionDate: today()
+  reviewerPartyId: '',
+  reviewerPartyLabel: '',
+  decisionDate: ''
 };
+
+function emptyForm() {
+  return { ...EMPTY, decisionDate: today() };
+}
+
+function partyHref(partyId) {
+  return `/party?record=${encodeURIComponent(partyId)}`;
+}
+
+function openRecord(event) {
+  event.preventDefault();
+  navigate(event.currentTarget.getAttribute('href'));
+}
 
 export default function CoverageTab({ claim }) {
   const [decision, setDecision] = useState(null);
-  const [form, setForm] = useState(EMPTY);
+  const [form, setForm] = useState(emptyForm);
+  const [reviewerLabels, setReviewerLabels] = useState({});
   const [error, setError] = useState('');
+  const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function load() {
     try {
-      setDecision(await api.coverage.get(claim.id));
+      return await api.coverage.get(claim.id);
     } catch (cause) {
-      if (cause.status === 404) {
-        setDecision(null);
-        return;
-      }
+      if (cause.status === 404) return null;
       throw cause;
     }
   }
 
   useEffect(() => {
-    load().catch((cause) => setError(cause.message));
+    let alive = true;
+    setDecision(null);
+    setReviewerLabels({});
+    setForm(emptyForm());
+    setError('');
+    setFormError('');
+
+    /**
+     * A saved decision carries only the reviewer party id. Resolve the shared
+     * party label for the decision link and hydrate the picker so recording a
+     * replacement decision keeps the same reviewer without another search. A
+     * failed lookup keeps the short-id fallback and never blocks the record.
+     */
+    async function hydrate(recorded) {
+      if (!alive || !recorded) return;
+      setDecision(recorded);
+      const reviewerId = recorded.reviewerPartyId ? String(recorded.reviewerPartyId) : '';
+      if (!reviewerId) return;
+
+      setForm((current) => ({ ...current, reviewerPartyId: reviewerId }));
+
+      let label =
+        typeof recorded.reviewerPartyLabel === 'string' ? recorded.reviewerPartyLabel : '';
+      if (!label) {
+        try {
+          label = partyLabel(await api.parties.get(reviewerId));
+        } catch {
+          label = '';
+        }
+      }
+      if (!alive || !label) return;
+
+      setReviewerLabels((current) => ({ ...current, [reviewerId]: label }));
+      setForm((current) =>
+        current.reviewerPartyId === reviewerId
+          ? { ...current, reviewerPartyLabel: label }
+          : current
+      );
+    }
+
+    load()
+      .then(hydrate)
+      .catch((cause) => {
+        if (alive) setError(cause.message);
+      });
+
+    return () => {
+      alive = false;
+    };
   }, [claim.id]);
 
   function update(field) {
     return (event) => setForm((current) => ({ ...current, [field]: event.target.value }));
   }
 
+  /** Keeps the selected party id and its picker label together. */
+  function selectReviewer(partyId, item) {
+    const id = partyId || '';
+    setForm((current) => ({
+      ...current,
+      reviewerPartyId: id,
+      reviewerPartyLabel: id ? item?.label || '' : ''
+    }));
+    if (id && item?.label) {
+      setReviewerLabels((current) => ({ ...current, [id]: item.label }));
+    }
+    setFormError('');
+  }
+
+  function validate() {
+    if (!form.reviewerPartyId) {
+      return 'Select the reviewer party from the shared party records.';
+    }
+    return '';
+  }
+
   async function submit(event) {
     event.preventDefault();
-    setBusy(true);
+    setFormError('');
     setError('');
+
+    const validation = validate();
+    if (validation) {
+      setFormError(validation);
+      return;
+    }
+
+    setBusy(true);
     try {
       const recorded = await api.coverage.decide(claim.id, {
         position: form.position,
@@ -53,7 +146,25 @@ export default function CoverageTab({ claim }) {
         reviewerPartyId: form.reviewerPartyId
       });
       setDecision(recorded);
-      setForm((current) => ({ ...current, basis: '' }));
+      const recordedReviewerId = recorded?.reviewerPartyId
+        ? String(recorded.reviewerPartyId)
+        : '';
+      const recordedLabel = recordedReviewerId
+        ? form.reviewerPartyLabel || reviewerLabels[recordedReviewerId] || ''
+        : '';
+      if (recordedReviewerId && recordedLabel) {
+        setReviewerLabels((current) => ({ ...current, [recordedReviewerId]: recordedLabel }));
+      }
+      setForm((current) => ({
+        ...current,
+        basis: '',
+        ...(recordedReviewerId
+          ? {
+              reviewerPartyId: recordedReviewerId,
+              reviewerPartyLabel: recordedLabel || current.reviewerPartyLabel
+            }
+          : {})
+      }));
     } catch (cause) {
       setError(cause.message);
     } finally {
@@ -61,6 +172,13 @@ export default function CoverageTab({ claim }) {
     }
   }
 
+  function reviewerLabelFor(partyId) {
+    if (!partyId) return '';
+    const id = String(partyId);
+    if (reviewerLabels[id]) return reviewerLabels[id];
+    if (form.reviewerPartyId === id && form.reviewerPartyLabel) return form.reviewerPartyLabel;
+    return shortId(id);
+  }
   return (
     <>
       <Panel title="Coverage decision">
@@ -79,7 +197,20 @@ export default function CoverageTab({ claim }) {
             <dt>Decision date</dt>
             <dd style={{ margin: 0 }}>{decision.decisionDate}</dd>
             <dt>Reviewer</dt>
-            <dd style={{ margin: 0 }}>{decision.reviewerPartyId}</dd>
+            <dd style={{ margin: 0 }}>
+              {decision.reviewerPartyId ? (
+                <a
+                  href={partyHref(decision.reviewerPartyId)}
+                  onClick={openRecord}
+                  data-testid="coverage-reviewer-link"
+                  title="Open reviewer party record"
+                >
+                  {reviewerLabelFor(decision.reviewerPartyId)}
+                </a>
+              ) : (
+                '—'
+              )}
+            </dd>
             <dt>Allocation</dt>
             <dd style={{ margin: 0 }}>
               {decision.allocationMethod || '—'} {decision.allocationPct ?? ''}
@@ -131,13 +262,52 @@ export default function CoverageTab({ claim }) {
           <Field label="Decision date">
             <input type="date" value={form.decisionDate} onChange={update('decisionDate')} required />
           </Field>
-          <Field label="Reviewer party ID">
-            <input value={form.reviewerPartyId} onChange={update('reviewerPartyId')} required />
+          <Field label="Reviewer party">
+            <EntityPicker
+              endpoint="/api/v1/parties/search"
+              value={form.reviewerPartyId}
+              valueLabel={form.reviewerPartyLabel}
+              onChange={selectReviewer}
+              placeholder="Search reviewer party number or name…"
+              disabled={busy}
+            />
+            {form.reviewerPartyId && (
+              <span className="eia-picker-hint" data-testid="coverage-reviewer-selection">
+                Selected reviewer party:{' '}
+                <a
+                  href={partyHref(form.reviewerPartyId)}
+                  onClick={openRecord}
+                  data-testid="coverage-reviewer-picker-link"
+                  title="Open reviewer party record"
+                >
+                  {form.reviewerPartyLabel || shortId(form.reviewerPartyId)}
+                </a>
+              </span>
+            )}
           </Field>
           <button type="submit" disabled={busy}>Record coverage decision</button>
         </form>
+        {formError && (
+          <div data-testid="coverage-form-error">
+            <ErrorText>{formError}</ErrorText>
+          </div>
+        )}
         <ErrorText>{error}</ErrorText>
       </Panel>
+
+      <section
+        className="eia-context-panel"
+        aria-label="Coverage context"
+        data-testid="coverage-context"
+      >
+        <h4>Coverage context</h4>
+        <p>
+          <b>The reviewer is a party record.</b> Choose the reviewer from the shared party master
+          data. The coverage decision stores the party id and links to that party record, so the
+          reviewer name and number stay owned by the party record instead of being copied onto the
+          decision.
+        </p>
+      </section>
     </>
   );
 }

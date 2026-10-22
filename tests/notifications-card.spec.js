@@ -215,10 +215,10 @@ test('lists the newest three related notifications with count and source query',
   );
   await expect(page.getByTestId('notifications-view-all')).toHaveAttribute(
     'href',
-    `/search?q=${encodeURIComponent(CLAIM.claimNumber)}`
+    `/notifications?sourceType=DIRECT_CLAIM&sourceId=${CLAIM.id}`
   );
   await expect(page.getByTestId('notifications-view-all-row')).toContainText(
-    'the Notifications queue has no source filter'
+    'opens the Notifications queue filtered to this claim'
   );
 
   expect(state.notificationRequests).toEqual([
@@ -297,6 +297,6 @@ test('links each notification to its record and opens claim search for all', asy
   await page.goto('/');
   await page.getByTestId('notifications-view-all').click();
   await expect(page).toHaveURL(
-    new RegExp(`/search\\?q=${encodeURIComponent(CLAIM.claimNumber)}$`)
+    new RegExp(`/notifications\\?sourceType=DIRECT_CLAIM&sourceId=${CLAIM.id}$`)
   );
 });

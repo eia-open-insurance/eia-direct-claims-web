@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from './api.js';
-import { navigate, recordHref, searchHref } from './navigation.js';
+import { navigate, recordHref } from './navigation.js';
 import { shortId } from './ui.jsx';
 
 /**
@@ -139,13 +139,11 @@ export default function NotificationsCard({ claim }) {
   const count = state === 'ready' ? items.length : '—';
   const newest = items.slice(0, RELATED_NOTIFICATION_LIMIT);
   /**
-   * The Notifications workbench has no URL source filter: it reads
-   * `sourceType`/`sourceId` only as create-draft prefill when `new=1` is set, so
-   * `/notifications?sourceType=…&sourceId=…` would open the unfiltered queue and
-   * silently drop the scope. Fall back to the shell search route, which accepts
-   * `?q=` and includes the Notifications vertical.
+   * The Notifications workbench accepts `sourceType`/`sourceId` as a queue
+   * scope, so the hand-off keeps the claim filter instead of falling back to
+   * an unfiltered queue or a text search.
    */
-  const viewAllHref = searchHref(claimNumber || claimId);
+  const viewAllHref = `/notifications?sourceType=DIRECT_CLAIM&sourceId=${encodeURIComponent(claimId)}`;
 
   return (
     <section
@@ -263,8 +261,7 @@ export default function NotificationsCard({ claim }) {
         <a href={viewAllHref} onClick={openNotification} data-testid="notifications-view-all">
           View all notifications
         </a>{' '}
-        — the Notifications queue has no source filter, so this opens search for{' '}
-        {claimNumber || 'this claim'}.
+        — opens the Notifications queue filtered to this claim.
       </p>
     </section>
   );
